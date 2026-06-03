@@ -1,0 +1,76 @@
+{
+  "expo": {
+    "name": "PRAHARI",
+    "slug": "prahari",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0F"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0A0F"
+      },
+      "package": "com.prahari.fieldauth",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.INTERNET",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT"
+      ],
+      "minSdkVersion": 26,
+      "targetSdkVersion": 34
+    },
+    "ios": {
+      "supportsTabletMode": false,
+      "bundleIdentifier": "com.prahari.fieldauth",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSCameraUsageDescription": "PRAHARI needs camera access for face recognition and liveness detection.",
+        "NSFaceIDUsageDescription": "PRAHARI uses Face ID for secure biometric vault access.",
+        "NSPhotoLibraryUsageDescription": "PRAHARI needs photo library access for enrollment testing.",
+        "NSPhotoLibraryAddUsageDescription": "PRAHARI needs permission to save photos.",
+        "NSMicrophoneUsageDescription": "PRAHARI may use audio for liveness detection."
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-camera",
+      "expo-sqlite",
+      "expo-secure-store",
+      "react-native-vision-camera",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "buildToolsVersion": "34.0.0",
+            "minSdkVersion": 26,
+            "enableProguardInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true
+          }
+        }
+      ]
+    ],
+    "scheme": "prahari",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "d9e540eb-d77d-45bb-9f76-076adf0f280c"
+      }
+    },
+    "owner": "dhrumilparikh"
+  }
+}

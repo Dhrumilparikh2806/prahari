@@ -16,6 +16,7 @@
     "@react-native-community/netinfo": "^11.3.0",
     "@react-navigation/native": "^6.1.9",
     "@react-navigation/native-stack": "^6.9.17",
+    "ajv": "^8.20.0",
     "aws-sdk": "^2.1550.0",
     "expo": "~50.0.0",
     "expo-asset": "~10.0.6",

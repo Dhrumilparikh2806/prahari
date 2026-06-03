@@ -44,21 +44,11 @@
     },
     "plugins": [
       "expo-router",
-      "expo-camera",
-      "expo-sqlite",
       "expo-secure-store",
-      "react-native-vision-camera",
       [
-        "expo-build-properties",
+        "react-native-vision-camera",
         {
-          "android": {
-            "compileSdkVersion": 34,
-            "targetSdkVersion": 34,
-            "buildToolsVersion": "34.0.0",
-            "minSdkVersion": 26,
-            "enableProguardInReleaseBuilds": true,
-            "enableShrinkResourcesInReleaseBuilds": true
-          }
+          "cameraPermissionText": "PRAHARI needs camera access for face recognition and liveness detection."
         }
       ]
     ],

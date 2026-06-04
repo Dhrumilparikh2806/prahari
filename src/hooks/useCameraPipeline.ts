@@ -1,31 +1,15 @@
 /**
  * useCameraPipeline.ts — Master Biometric Pipeline Orchestrator
  *
- * Wires together all five system layers into a single, phase-tracked pipeline:
+ * Wires together the full pipeline using only JS/WebView-based components:
  *
- *   Frame → MediaPipe landmarks
- *         → Geometric liveness (EAR + blink + head pose)
- *         → rPPG heartbeat liveness
- *         → [both pass] → Face recognition (TFLite embedding)
- *         → Vault match or enrollment
+ *   Frame (base64) → MediaPipe WebView → 468 landmarks
+ *                  → useGeometricLiveness(landmarks)  → geometric score
+ *                  → useRemotePhotoplethysmography(frame, landmarks) → BPM
+ *                  → [both pass] → landmark embedding → vault match / enroll
  *
- * Phase state machine:
- *   idle → detecting → liveness → recognizing → done
- *
- * Enrollment mode:
- *   Captures ENROLLMENT_FRAMES frames once liveness passes, averages the
- *   embeddings, and saves to the vault.  No match step.
- *
- * Verification mode:
- *   On liveness pass, generates a single embedding and compares it to the
- *   stored embedding for `userId`.
- *
- * Usage:
- *   const pipeline = useCameraPipeline({ mediaPipe, faceRecognition });
- *   // In your camera frame handler:
- *   pipeline.submitFrame(base64Jpeg);
- *   // Then:
- *   pipeline.startVerification(userId);   // or pipeline.startEnrollment(name)
+ * No TFLite/native compilation needed. Face embeddings are generated from
+ * MediaPipe landmark geometry (128 pairwise distances, L2-normalised).
  */
 
 import { useState, useRef, useCallback } from 'react';
@@ -37,68 +21,37 @@ import { logAttendance } from '@database/attendance';
 import { RECOGNITION, LIVENESS, RPPG } from '@config/constants';
 import type { UseMediaPipeState } from '@hooks/useMediaPipe';
 import type { UseFaceRecognitionState } from '@hooks/useFaceRecognition';
+import type { FaceLandmark } from '@hooks/useMediaPipe';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-/** Pipeline phase — drives UI feedback */
-export type PipelinePhase =
-  | 'idle'          // Not started
-  | 'detecting'     // Waiting for a face
-  | 'liveness'      // Running geometric + rPPG checks
-  | 'recognizing'   // Running TFLite inference
-  | 'done';         // Final result available
-
+export type PipelinePhase = 'idle' | 'detecting' | 'liveness' | 'recognizing' | 'done';
 export type PipelineMode = 'verify' | 'enroll';
 
 export interface PipelineResult {
-  /** True if liveness + recognition both passed */
   passed: boolean;
-  /** Personnel name (on success) */
   name?: string;
-  /** Detected BPM from rPPG */
   bpm?: number;
-  /** Cosine similarity score from face match */
   confidence?: number;
-  /** Total pipeline latency in milliseconds */
   latencyMs?: number;
-  /** Human-readable failure reason */
   failureReason?: string;
 }
 
 export interface UseCameraPipelineState {
   phase: PipelinePhase;
   result: PipelineResult | null;
-  /** Number of liveness blinks detected so far */
   blinkCount: number;
-  /** True when head is within pose bounds */
   headInFrame: boolean;
-  /** Detected BPM (0 while still collecting) */
   currentBpm: number;
-  /** rPPG signal confidence [0–1] */
   rPPGConfidence: number;
-  /** Geometric liveness score [0–1] */
   geometricScore: number;
-  /**
-   * Submit a camera frame to the pipeline.
-   * @param base64Jpeg  Base64 JPEG (with or without data-URI prefix).
-   */
   submitFrame: (base64Jpeg: string) => Promise<void>;
-  /**
-   * Start a verification run.  Must be called before submitFrame.
-   * @param userId   Personnel UUID to match against.
-   */
   startVerification: (userId: string) => void;
-  /**
-   * Start an enrollment run.  Must be called before submitFrame.
-   * @param name     Display name for the new record.
-   * @param userId   Optional: supply to use a specific UUID (e.g., re-enroll).
-   */
   startEnrollment: (name: string, userId?: string) => void;
-  /** Reset pipeline back to idle (call between sessions) */
   reset: () => void;
 }
 
-// ─── UUID helper ──────────────────────────────────────────────────────────────
+// ─── UUID ─────────────────────────────────────────────────────────────────────
 
 function generateUUID(): string {
   const hex = () => Math.floor(Math.random() * 0xffff).toString(16).padStart(4, '0');
@@ -107,19 +60,15 @@ function generateUUID(): string {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-interface CameraPipelineProps {
+interface Props {
   mediaPipe: UseMediaPipeState;
   faceRecognition: UseFaceRecognitionState;
 }
 
-export function useCameraPipeline({
-  mediaPipe,
-  faceRecognition,
-}: CameraPipelineProps): UseCameraPipelineState {
+export function useCameraPipeline({ mediaPipe, faceRecognition }: Props): UseCameraPipelineState {
   const geometric = useGeometricLiveness();
   const rPPG = useRemotePhotoplethysmography();
 
-  // ── UI state ───────────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<PipelinePhase>('idle');
   const [result, setResult] = useState<PipelineResult | null>(null);
   const [blinkCount, setBlinkCount] = useState(0);
@@ -128,15 +77,31 @@ export function useCameraPipeline({
   const [rPPGConfidence, setRPPGConfidence] = useState(0);
   const [geometricScore, setGeometricScore] = useState(0);
 
-  // ── Internal refs (survive re-renders without triggering them) ─────────────
   const modeRef = useRef<PipelineMode>('verify');
-  const userIdRef = useRef<string>('');
-  const userNameRef = useRef<string>('');
-  const startTimeRef = useRef<number>(0);
+  const userIdRef = useRef('');
+  const userNameRef = useRef('');
+  const startTimeRef = useRef(0);
   const enrollmentEmbeddingsRef = useRef<Float32Array[]>([]);
-  const isProcessingRef = useRef(false);  // Re-entrancy guard
+  const isProcessingRef = useRef(false);
 
-  // ── Public controls ────────────────────────────────────────────────────────
+  // Last known landmarks (set each frame, used for embedding)
+  const lastLandmarksRef = useRef<FaceLandmark[] | null>(null);
+
+  // ── Controls ───────────────────────────────────────────────────────────────
+
+  const resetInternal = () => {
+    geometric.reset();
+    rPPG.reset();
+    enrollmentEmbeddingsRef.current = [];
+    lastLandmarksRef.current = null;
+    isProcessingRef.current = false;
+    setResult(null);
+    setBlinkCount(0);
+    setHeadInFrame(false);
+    setCurrentBpm(0);
+    setRPPGConfidence(0);
+    setGeometricScore(0);
+  };
 
   const startVerification = useCallback((userId: string) => {
     resetInternal();
@@ -155,19 +120,6 @@ export function useCameraPipeline({
     setPhase('detecting');
   }, []);
 
-  const resetInternal = () => {
-    geometric.reset();
-    rPPG.reset();
-    enrollmentEmbeddingsRef.current = [];
-    isProcessingRef.current = false;
-    setResult(null);
-    setBlinkCount(0);
-    setHeadInFrame(false);
-    setCurrentBpm(0);
-    setRPPGConfidence(0);
-    setGeometricScore(0);
-  };
-
   const reset = useCallback(() => {
     resetInternal();
     setPhase('idle');
@@ -176,40 +128,30 @@ export function useCameraPipeline({
   // ── Frame processing ───────────────────────────────────────────────────────
 
   const submitFrame = useCallback(async (base64Jpeg: string): Promise<void> => {
-    // Guard: don't process frames when not active or re-entrancy
     if (phase === 'idle' || phase === 'done') return;
     if (isProcessingRef.current) return;
     if (!mediaPipe.ready) return;
 
     isProcessingRef.current = true;
-
     try {
       await processFrame(base64Jpeg);
-    } catch (err) {
-      console.error('[useCameraPipeline] processFrame error:', err);
     } finally {
       isProcessingRef.current = false;
     }
   }, [phase, mediaPipe.ready]);
 
-  /**
-   * Core frame processing logic.  Separated from submitFrame to keep
-   * the outer function clean.
-   */
-  const processFrame = async (base64Jpeg: string): Promise<void> => {
-    // ── Step 1: MediaPipe face landmark detection ──────────────────────────
+  const processFrame = async (base64Jpeg: string) => {
     setPhase('detecting');
+
+    // Step 1: MediaPipe landmark detection
     const mpResult = await mediaPipe.processFrame(base64Jpeg);
+    if (!mpResult || !mpResult.landmarks) return;
 
-    if (!mpResult || !mpResult.landmarks) {
-      // No face in frame — reset blink history to avoid stale counts
-      return;
-    }
-
-    setPhase('liveness');
     const { landmarks, frameWidth, frameHeight } = mpResult;
+    lastLandmarksRef.current = landmarks;
+    setPhase('liveness');
 
-    // ── Step 2: Geometric liveness ─────────────────────────────────────────
+    // Step 2: Geometric liveness
     const geoResult = geometric.analyzeFrame(landmarks);
     if (geoResult) {
       setBlinkCount(geoResult.eyeMetrics.blinkCount);
@@ -220,10 +162,8 @@ export function useCameraPipeline({
       setGeometricScore(geoResult.score);
     }
 
-    // ── Step 3: rPPG heartbeat ─────────────────────────────────────────────
-    // We need raw pixel data for rPPG — decode the base64 JPEG to Uint8ClampedArray
-    // For the hackathon demo: derive a proxy RGBA buffer from the base64 string
-    const proxyPixels = base64ToProxyPixels(base64Jpeg, frameWidth, frameHeight);
+    // Step 3: rPPG — proxy pixel buffer from base64 bytes
+    const proxyPixels = buildProxyPixels(base64Jpeg, frameWidth, frameHeight);
     rPPG.addFrame(proxyPixels, landmarks, frameWidth, frameHeight);
 
     const rPPGResult = rPPG.getResult();
@@ -232,200 +172,122 @@ export function useCameraPipeline({
       setRPPGConfidence(rPPGResult.confidence);
     }
 
-    // ── Liveness gate ──────────────────────────────────────────────────────
+    // Step 4: Liveness gate
     const geometricPass = (geoResult?.score ?? 0) >= LIVENESS.GEOMETRIC_SCORE_MIN;
     const rPPGPass = (rPPGResult?.confidence ?? 0) >= RPPG.CONFIDENCE_MIN
-                      && (rPPGResult?.heartbeatDetected ?? false);
+                    && (rPPGResult?.heartbeatDetected ?? false);
 
-    const livenessPass = geometricPass && rPPGPass;
+    if (!geometricPass || !rPPGPass) return;
 
-    if (!livenessPass) {
-      // Keep accumulating frames
-      return;
-    }
-
-    // ── Step 4: Face recognition ───────────────────────────────────────────
+    // Step 5: Face embedding from landmarks
     setPhase('recognizing');
-
-    if (!faceRecognition.ready) {
-      setResult({
-        passed: false,
-        failureReason: 'Face recognition model not ready',
-      });
+    const embedding = faceRecognition.generateEmbeddingFromLandmarks(landmarks);
+    if (!embedding) {
+      setResult({ passed: false, failureReason: 'Could not generate face embedding' });
       setPhase('done');
       return;
     }
 
-    const imageUri = base64ToFileUri(base64Jpeg);
+    const bpm = rPPGResult?.pulseFrequency ?? 0;
 
     if (modeRef.current === 'enroll') {
-      await handleEnrollment(imageUri, rPPGResult?.pulseFrequency ?? 0);
+      await handleEnrollment(embedding, bpm);
     } else {
-      await handleVerification(imageUri, rPPGResult?.pulseFrequency ?? 0, rPPGResult?.confidence ?? 0);
+      await handleVerification(embedding, bpm, rPPGResult?.confidence ?? 0);
     }
   };
 
-  /** Enrollment: collect embeddings until we have enough, then average and save */
-  const handleEnrollment = async (imageUri: string, bpm: number): Promise<void> => {
+  const handleEnrollment = async (embedding: Float32Array, bpm: number) => {
+    enrollmentEmbeddingsRef.current.push(embedding);
+    const needed = RECOGNITION.ENROLLMENT_FRAMES;
+
+    if (enrollmentEmbeddingsRef.current.length < needed) {
+      setPhase('liveness'); // collect more frames
+      return;
+    }
+
     try {
-      const embedding = await faceRecognition.generateEmbedding(imageUri);
-      enrollmentEmbeddingsRef.current.push(embedding);
-
-      const needed = RECOGNITION.ENROLLMENT_FRAMES;
-      const collected = enrollmentEmbeddingsRef.current.length;
-
-      if (collected < needed) {
-        // Not enough frames yet — stay in 'liveness' phase, collect more
-        setPhase('liveness');
-        return;
-      }
-
-      // Average embeddings to reduce noise
       const averaged = averageEmbeddings(enrollmentEmbeddingsRef.current);
-
-      // Encrypt and persist to vault
       await saveBiometric(userIdRef.current, averaged);
 
-      // Also update the Personnel name (vault.js saves userId as name by default;
-      // update it via direct DB call since we have the actual name here)
+      // Update name in Personnel table
       const { db } = await import('@database/schema');
-      await db.executeAsync(
-        'UPDATE Personnel SET name = ? WHERE id = ?',
-        [userNameRef.current, userIdRef.current]
-      );
+      await db.transactionAsync(async (tx) => {
+        await tx.executeSqlAsync(
+          'UPDATE Personnel SET name = ? WHERE id = ?',
+          [userNameRef.current, userIdRef.current]
+        );
+      });
 
-      const latencyMs = Date.now() - startTimeRef.current;
       setResult({
         passed: true,
         name: userNameRef.current,
         bpm,
-        latencyMs,
+        latencyMs: Date.now() - startTimeRef.current,
       });
-      setPhase('done');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Enrollment failed';
-      setResult({ passed: false, failureReason: msg });
-      setPhase('done');
+      setResult({ passed: false, failureReason: err instanceof Error ? err.message : 'Enrollment failed' });
     }
+    setPhase('done');
   };
 
-  /** Verification: generate one embedding and compare to stored record */
-  const handleVerification = async (
-    imageUri: string,
-    bpm: number,
-    rPPGConf: number
-  ): Promise<void> => {
+  const handleVerification = async (embedding: Float32Array, bpm: number, rPPGConf: number) => {
     try {
-      const embedding = await faceRecognition.generateEmbeddingArray(imageUri);
-      const { matched, score } = await matchBiometric(userIdRef.current, embedding);
-
+      const embeddingArr = faceRecognition.embeddingToNumberArray(embedding);
+      const { matched, score } = await matchBiometric(userIdRef.current, embeddingArr);
       const latencyMs = Date.now() - startTimeRef.current;
 
       if (matched) {
-        // Log successful attendance
         await logAttendance(userIdRef.current, score, bpm, null);
 
-        // Get personnel name for result card
         const { db } = await import('@database/schema');
-        const { rows } = await db.executeAsync(
-          'SELECT name FROM Personnel WHERE id = ?',
-          [userIdRef.current]
-        );
-        const name = rows?._array?.[0]?.name ?? userIdRef.current;
-
-        setResult({
-          passed: true,
-          name,
-          bpm,
-          confidence: score,
-          latencyMs,
+        let personName = userIdRef.current;
+        await db.transactionAsync(async (tx) => {
+          const res = await tx.executeSqlAsync(
+            'SELECT name FROM Personnel WHERE id = ?', [userIdRef.current]
+          );
+          personName = (res.rows[0]?.name as string) ?? userIdRef.current;
         });
+
+        setResult({ passed: true, name: personName, bpm, confidence: score, latencyMs });
       } else {
         setResult({
-          passed: false,
-          bpm,
-          confidence: score,
-          latencyMs,
+          passed: false, bpm, confidence: score, latencyMs,
           failureReason: score < 0.3 ? 'Face not recognised' : 'Confidence below threshold',
         });
       }
-
-      setPhase('done');
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Verification failed';
-      setResult({ passed: false, failureReason: msg });
-      setPhase('done');
+      setResult({ passed: false, failureReason: err instanceof Error ? err.message : 'Verification failed' });
     }
+    setPhase('done');
   };
 
   return {
-    phase,
-    result,
-    blinkCount,
-    headInFrame,
-    currentBpm,
-    rPPGConfidence,
-    geometricScore,
-    submitFrame,
-    startVerification,
-    startEnrollment,
-    reset,
+    phase, result, blinkCount, headInFrame,
+    currentBpm, rPPGConfidence, geometricScore,
+    submitFrame, startVerification, startEnrollment, reset,
   };
 }
 
-// ─── Utility: base64 → proxy Uint8ClampedArray ────────────────────────────────
+// ─── Utility ──────────────────────────────────────────────────────────────────
 
-/**
- * Creates a proxy RGBA pixel buffer from a base64 JPEG string for rPPG processing.
- *
- * A proper implementation would fully decode the JPEG; for the hackathon we
- * distribute the compressed bytes across the RGBA buffer, which is sufficient
- * to produce a periodic signal from the green channel.
- *
- * In a production build, use a native image decoder (e.g., react-native-image-
- * processing-tools) to get actual pixel values.
- *
- * @param base64Jpeg  Base64 JPEG data (with or without data-URI prefix)
- * @param width       Frame width in pixels
- * @param height      Frame height in pixels
- */
-function base64ToProxyPixels(
-  base64Jpeg: string,
-  width: number,
-  height: number
-): Uint8ClampedArray {
+function buildProxyPixels(base64Jpeg: string, width: number, height: number): Uint8ClampedArray {
   const raw = base64Jpeg.includes(',') ? base64Jpeg.split(',')[1] : base64Jpeg;
-
-  // Decode base64 to bytes
   let bytes: Uint8Array;
   try {
     const binary = atob(raw);
     bytes = new Uint8Array(binary.length);
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  } catch {
-    bytes = new Uint8Array(0);
-  }
+  } catch { bytes = new Uint8Array(0); }
 
   const pixelCount = width * height;
   const rgba = new Uint8ClampedArray(pixelCount * 4);
-
   for (let i = 0; i < pixelCount; i++) {
-    const byteIdx = i % (bytes.length || 1);
-    // Distribute byte values across RGB channels; alpha = 255
-    rgba[i * 4]     = bytes[byteIdx];
-    rgba[i * 4 + 1] = bytes[(byteIdx + 1) % (bytes.length || 1)];
-    rgba[i * 4 + 2] = bytes[(byteIdx + 2) % (bytes.length || 1)];
+    const b = i % (bytes.length || 1);
+    rgba[i * 4]     = bytes[b];
+    rgba[i * 4 + 1] = bytes[(b + 1) % (bytes.length || 1)];
+    rgba[i * 4 + 2] = bytes[(b + 2) % (bytes.length || 1)];
     rgba[i * 4 + 3] = 255;
   }
-
   return rgba;
-}
-
-/**
- * Converts a base64 string to a data URI that expo-image-manipulator can accept.
- * If a file:// URI is needed, the caller should save it with expo-file-system first.
- */
-function base64ToFileUri(base64: string): string {
-  if (base64.startsWith('data:') || base64.startsWith('file://')) return base64;
-  return `data:image/jpeg;base64,${base64}`;
 }

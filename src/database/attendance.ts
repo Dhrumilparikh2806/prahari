@@ -15,92 +15,100 @@ export interface AttendanceLog {
   syncAt: number | null;
 }
 
-// Raw SQLite row shape
-interface AttendanceRow {
-  id: string;
-  personnel_id: string;
-  timestamp: number;
-  location: string | null;
-  confidence: number;
-  bpm: number;
-  synced: number;
-  sync_at: number | null;
-}
-
 function generateUUID(): string {
   const hex = () => Math.floor(Math.random() * 0xffff).toString(16).padStart(4, '0');
   return `${hex()}${hex()}-${hex()}-4${hex().slice(1)}-${hex()}-${hex()}${hex()}${hex()}`;
 }
 
-function rowToLog(row: AttendanceRow): AttendanceLog {
+function rowToLog(row: Record<string, unknown>): AttendanceLog {
   return {
-    id: row.id,
-    personnelId: row.personnel_id,
-    timestamp: row.timestamp,
-    location: row.location ?? null,
-    confidence: row.confidence ?? 0,
-    bpm: row.bpm ?? 0,
-    synced: row.synced ?? 0,
-    syncAt: row.sync_at ?? null,
+    id: row.id as string,
+    personnelId: row.personnel_id as string,
+    timestamp: row.timestamp as number,
+    location: (row.location as string | null) ?? null,
+    confidence: (row.confidence as number) ?? 0,
+    bpm: (row.bpm as number) ?? 0,
+    synced: (row.synced as number) ?? 0,
+    syncAt: (row.sync_at as number | null) ?? null,
   };
 }
 
 export async function logAttendance(
-  personnelId: string,
-  confidence = 0,
-  bpm = 0,
-  location: string | null = null
+  personnelId: string, confidence = 0, bpm = 0, location: string | null = null
 ): Promise<string> {
   const id = generateUUID();
-  await db.runAsync(
-    `INSERT INTO AttendanceLogs
-       (id, personnel_id, timestamp, location, confidence, bpm, synced, sync_at)
-     VALUES (?, ?, ?, ?, ?, ?, 0, NULL)`,
-    [id, personnelId, Date.now(), location, confidence, bpm]
-  );
+  await db.transactionAsync(async (tx) => {
+    await tx.executeSqlAsync(
+      `INSERT INTO AttendanceLogs (id, personnel_id, timestamp, location, confidence, bpm, synced, sync_at)
+       VALUES (?, ?, ?, ?, ?, ?, 0, NULL)`,
+      [id, personnelId, Date.now(), location, confidence, bpm]
+    );
+  });
   return id;
 }
 
 export async function getPendingLogs(): Promise<AttendanceLog[]> {
-  const rows = await db.getAllAsync<AttendanceRow>(
-    'SELECT * FROM AttendanceLogs WHERE synced = 0 ORDER BY timestamp ASC'
-  );
-  return rows.map(rowToLog);
+  let rows: unknown[] = [];
+  await db.transactionAsync(async (tx) => {
+    const res = await tx.executeSqlAsync(
+      'SELECT * FROM AttendanceLogs WHERE synced = 0 ORDER BY timestamp ASC'
+    );
+    rows = res.rows;
+  });
+  return (rows as Record<string, unknown>[]).map(rowToLog);
 }
 
 export async function markSynced(ids: string[]): Promise<void> {
   if (ids.length === 0) return;
   const placeholders = ids.map(() => '?').join(', ');
-  await db.runAsync(
-    `UPDATE AttendanceLogs SET synced = 1, sync_at = ? WHERE id IN (${placeholders})`,
-    [Date.now(), ...ids]
-  );
+  await db.transactionAsync(async (tx) => {
+    await tx.executeSqlAsync(
+      `UPDATE AttendanceLogs SET synced = 1, sync_at = ? WHERE id IN (${placeholders})`,
+      [Date.now(), ...ids]
+    );
+  });
 }
 
 export async function purgeSyncedLogs(): Promise<number> {
-  const result = await db.runAsync('DELETE FROM AttendanceLogs WHERE synced = 1', []);
-  return result.changes;
+  let changes = 0;
+  await db.transactionAsync(async (tx) => {
+    const res = await tx.executeSqlAsync('DELETE FROM AttendanceLogs WHERE synced = 1');
+    changes = res.rowsAffected;
+  });
+  return changes;
 }
 
 export async function getRecentLogs(limit = 50): Promise<AttendanceLog[]> {
-  const rows = await db.getAllAsync<AttendanceRow>(
-    'SELECT * FROM AttendanceLogs ORDER BY timestamp DESC LIMIT ?',
-    [limit]
-  );
-  return rows.map(rowToLog);
+  let rows: unknown[] = [];
+  await db.transactionAsync(async (tx) => {
+    const res = await tx.executeSqlAsync(
+      'SELECT * FROM AttendanceLogs ORDER BY timestamp DESC LIMIT ?',
+      [limit]
+    );
+    rows = res.rows;
+  });
+  return (rows as Record<string, unknown>[]).map(rowToLog);
 }
 
 export async function getPendingCount(): Promise<number> {
-  const row = await db.getFirstAsync<{ cnt: number }>(
-    'SELECT COUNT(*) as cnt FROM AttendanceLogs WHERE synced = 0'
-  );
-  return row?.cnt ?? 0;
+  let cnt = 0;
+  await db.transactionAsync(async (tx) => {
+    const res = await tx.executeSqlAsync(
+      'SELECT COUNT(*) as cnt FROM AttendanceLogs WHERE synced = 0'
+    );
+    cnt = (res.rows[0]?.cnt as number) ?? 0;
+  });
+  return cnt;
 }
 
 export async function getLogsForPersonnel(personnelId: string, limit = 100): Promise<AttendanceLog[]> {
-  const rows = await db.getAllAsync<AttendanceRow>(
-    'SELECT * FROM AttendanceLogs WHERE personnel_id = ? ORDER BY timestamp DESC LIMIT ?',
-    [personnelId, limit]
-  );
-  return rows.map(rowToLog);
+  let rows: unknown[] = [];
+  await db.transactionAsync(async (tx) => {
+    const res = await tx.executeSqlAsync(
+      'SELECT * FROM AttendanceLogs WHERE personnel_id = ? ORDER BY timestamp DESC LIMIT ?',
+      [personnelId, limit]
+    );
+    rows = res.rows;
+  });
+  return (rows as Record<string, unknown>[]).map(rowToLog);
 }

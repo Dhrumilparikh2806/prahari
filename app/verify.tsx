@@ -1,7 +1,8 @@
 /**
- * verify.tsx — Identity Verification Screen (expo-camera)
+ * verify.tsx — Identity Verification Screen
  *
- * Uses expo-camera (Expo first-party) for guaranteed EAS build compatibility.
+ * Shows enrolled personnel by NAME (not UUID) in the selector.
+ * Uses getEnrolledPersonnel() which returns { id, name, enrolled_at }.
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
@@ -19,8 +20,10 @@ import CameraOverlay from '@components/CameraOverlay';
 import LivenessIndicator from '@components/LivenessIndicator';
 import HeartbeatPulse from '@components/HeartbeatPulse';
 import ResultCard from '@components/ResultCard';
-import { listEnrolled } from '@database/vault';
+import { getEnrolledPersonnel } from '@database/vault';
 import { UI, LIVENESS, RPPG } from '@config/constants';
+
+interface Personnel { id: string; name: string; enrolled_at: number; }
 
 export default function VerifyScreen() {
   const router = useRouter();
@@ -28,8 +31,8 @@ export default function VerifyScreen() {
   const [permission, requestPermission] = Camera.useCameraPermissions();
   const cameraRef = useRef<Camera>(null);
 
-  const [enrolledIds, setEnrolledIds] = useState<string[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [personnel, setPersonnel] = useState<Personnel[]>([]);
+  const [selectedPersonnel, setSelectedPersonnel] = useState<Personnel | null>(null);
   const [loadingPersonnel, setLoadingPersonnel] = useState(true);
   const [holdSeconds, setHoldSeconds] = useState(0);
   const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -42,17 +45,18 @@ export default function VerifyScreen() {
 
   useEffect(() => { if (!permission?.granted) requestPermission(); }, []);
 
-  useFocusEffect(useCallback(() => { loadEnrolled(); }, []));
+  useFocusEffect(useCallback(() => { loadPersonnel(); }, []));
 
-  const loadEnrolled = async () => {
+  const loadPersonnel = async () => {
     try {
-      const ids = await listEnrolled();
-      setEnrolledIds(ids);
-      if (ids.length > 0) setSelectedId(ids[0]);
-    } catch (e) { console.error(e); }
+      const list = await getEnrolledPersonnel() as Personnel[];
+      setPersonnel(list);
+      if (list.length > 0) setSelectedPersonnel(list[0]);
+    } catch (e) { console.error('[verify] loadPersonnel:', e); }
     finally { setLoadingPersonnel(false); }
   };
 
+  // Hold-still countdown
   useEffect(() => {
     if (!isScanning) return;
     if (pipeline.headInFrame && pipeline.blinkCount >= LIVENESS.MIN_BLINKS) {
@@ -74,9 +78,9 @@ export default function VerifyScreen() {
   useEffect(() => { if (pipeline.phase === 'done') stopCapture(); }, [pipeline.phase]);
 
   const startCapture = () => {
-    if (!selectedId) return;
+    if (!selectedPersonnel) return;
     setIsScanning(true);
-    pipeline.startVerification(selectedId);
+    pipeline.startVerification(selectedPersonnel.id, selectedPersonnel.name);
     frameIntervalRef.current = setInterval(async () => {
       try {
         if (!cameraRef.current) return;
@@ -104,7 +108,8 @@ export default function VerifyScreen() {
     return 'Matching identity…';
   };
 
-  const livenessPass = pipeline.rPPGConfidence >= RPPG.CONFIDENCE_MIN && pipeline.geometricScore >= LIVENESS.GEOMETRIC_SCORE_MIN;
+  const livenessPass = pipeline.rPPGConfidence >= RPPG.CONFIDENCE_MIN
+    && pipeline.geometricScore >= LIVENESS.GEOMETRIC_SCORE_MIN;
 
   // ── Personnel selector ─────────────────────────────────────────────────────
 
@@ -120,8 +125,8 @@ export default function VerifyScreen() {
 
           {loadingPersonnel ? (
             <ActivityIndicator color={UI.ACCENT_COLOR} size="large" />
-          ) : enrolledIds.length === 0 ? (
-            <View style={styles.emptyState}>
+          ) : personnel.length === 0 ? (
+            <View style={styles.empty}>
               <Text style={styles.emptyText}>No personnel enrolled yet.</Text>
               <TouchableOpacity onPress={() => router.push('/enroll')}>
                 <Text style={styles.enrollLink}>Enroll someone first →</Text>
@@ -129,25 +134,28 @@ export default function VerifyScreen() {
             </View>
           ) : (
             <FlatList
-              data={enrolledIds}
-              keyExtractor={id => id}
+              data={personnel}
+              keyExtractor={p => p.id}
               style={styles.list}
               renderItem={({ item }) => (
                 <TouchableOpacity
-                  style={[styles.row, selectedId === item && styles.rowSelected]}
-                  onPress={() => setSelectedId(item)}
+                  style={[styles.row, selectedPersonnel?.id === item.id && styles.rowSelected]}
+                  onPress={() => setSelectedPersonnel(item)}
                 >
-                  <View style={[styles.radio, selectedId === item && styles.radioOn]} />
-                  <Text style={styles.rowText} numberOfLines={1}>{item}</Text>
+                  <View style={[styles.radio, selectedPersonnel?.id === item.id && styles.radioOn]} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.rowName}>{item.name}</Text>
+                    <Text style={styles.rowId} numberOfLines={1}>ID: {item.id.slice(0, 12)}…</Text>
+                  </View>
                 </TouchableOpacity>
               )}
             />
           )}
 
           <TouchableOpacity
-            style={[styles.startBtn, (!selectedId || !mediaPipe.ready) && styles.startBtnOff]}
+            style={[styles.startBtn, (!selectedPersonnel || !mediaPipe.ready) && styles.startBtnOff]}
             onPress={startCapture}
-            disabled={!selectedId || !mediaPipe.ready}
+            disabled={!selectedPersonnel || !mediaPipe.ready}
           >
             {!mediaPipe.ready ? (
               <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
@@ -155,7 +163,9 @@ export default function VerifyScreen() {
                 <Text style={styles.startBtnText}>Loading AI…</Text>
               </View>
             ) : (
-              <Text style={styles.startBtnText}>Start Scan</Text>
+              <Text style={styles.startBtnText}>
+                {selectedPersonnel ? `Verify: ${selectedPersonnel.name}` : 'Start Scan'}
+              </Text>
             )}
           </TouchableOpacity>
         </View>
@@ -163,7 +173,7 @@ export default function VerifyScreen() {
     );
   }
 
-  // ── Camera scanning ────────────────────────────────────────────────────────
+  // ── Scanning ───────────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
@@ -179,7 +189,7 @@ export default function VerifyScreen() {
         <WebView
           ref={mediaPipe.webViewRef}
           source={{ uri: mediaPipe.htmlUri }}
-          style={styles.hiddenWebView}
+          style={styles.hidden}
           onMessage={mediaPipe.onMessage}
           javaScriptEnabled
           originWhitelist={['*']}
@@ -215,7 +225,9 @@ export default function VerifyScreen() {
         <TouchableOpacity style={styles.closeBtn} onPress={() => { stopCapture(); router.back(); }}>
           <Text style={styles.closeBtnText}>✕</Text>
         </TouchableOpacity>
-        <Text style={styles.topBarTitle}>Identity Verification</Text>
+        <Text style={styles.topBarTitle}>
+          Verifying: {selectedPersonnel?.name ?? ''}
+        </Text>
       </SafeAreaView>
     </View>
   );
@@ -231,14 +243,15 @@ const styles = StyleSheet.create({
   list: { flex: 1, marginBottom: 16 },
   row: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 14, paddingHorizontal: 16, borderRadius: 12,
+    paddingVertical: 12, paddingHorizontal: 16, borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.05)', marginBottom: 8,
   },
   rowSelected: { backgroundColor: 'rgba(0,198,174,0.12)', borderWidth: 1, borderColor: UI.ACCENT_COLOR },
   radio: { width: 18, height: 18, borderRadius: 9, borderWidth: 2, borderColor: '#555' },
   radioOn: { borderColor: UI.ACCENT_COLOR, backgroundColor: UI.ACCENT_COLOR },
-  rowText: { color: '#FFF', fontSize: 14, flex: 1 },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  rowName: { color: '#FFF', fontSize: 15, fontWeight: '600' },
+  rowId: { color: '#555', fontSize: 11, marginTop: 2 },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   emptyText: { color: '#555', fontSize: 15 },
   enrollLink: { color: UI.ACCENT_COLOR, fontSize: 15, textDecorationLine: 'underline' },
   startBtn: { backgroundColor: UI.ACCENT_COLOR, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 24 },
@@ -247,7 +260,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   noCamera: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
   noCameraText: { color: '#555', fontSize: 16 },
-  hiddenWebView: { width: 1, height: 1, opacity: 0, position: 'absolute' },
+  hidden: { width: 1, height: 1, opacity: 0, position: 'absolute' },
   livenessBox: { position: 'absolute', bottom: 240, left: 0, right: 0 },
   heartbeatBox: { position: 'absolute', bottom: 120, left: 0, right: 0 },
   topBar: {

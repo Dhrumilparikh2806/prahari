@@ -1,15 +1,14 @@
 /**
  * useCameraPipeline.ts — Master Biometric Pipeline Orchestrator
  *
- * Wires together the full pipeline using only JS/WebView-based components:
+ * Pipeline:
+ *   Frame → MediaPipe landmarks → Geometric liveness → rPPG heartbeat
+ *         → [both pass] → Landmark embedding → Vault match / enroll
  *
- *   Frame (base64) → MediaPipe WebView → 468 landmarks
- *                  → useGeometricLiveness(landmarks)  → geometric score
- *                  → useRemotePhotoplethysmography(frame, landmarks) → BPM
- *                  → [both pass] → landmark embedding → vault match / enroll
- *
- * No TFLite/native compilation needed. Face embeddings are generated from
- * MediaPipe landmark geometry (128 pairwise distances, L2-normalised).
+ * Changes from previous version:
+ *   • startVerification now accepts name for display in ResultCard
+ *   • saveBiometric called with (userId, name, embedding) — 3 args
+ *   • matchBiometric returns { match, score } (not { matched, score })
  */
 
 import { useState, useRef, useCallback } from 'react';
@@ -26,7 +25,6 @@ import type { FaceLandmark } from '@hooks/useMediaPipe';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export type PipelinePhase = 'idle' | 'detecting' | 'liveness' | 'recognizing' | 'done';
-export type PipelineMode = 'verify' | 'enroll';
 
 export interface PipelineResult {
   passed: boolean;
@@ -46,7 +44,9 @@ export interface UseCameraPipelineState {
   rPPGConfidence: number;
   geometricScore: number;
   submitFrame: (base64Jpeg: string) => Promise<void>;
-  startVerification: (userId: string) => void;
+  /** @param userId Personnel UUID to match against */
+  /** @param name   Display name shown on result card */
+  startVerification: (userId: string, name?: string) => void;
   startEnrollment: (name: string, userId?: string) => void;
   reset: () => void;
 }
@@ -77,14 +77,12 @@ export function useCameraPipeline({ mediaPipe, faceRecognition }: Props): UseCam
   const [rPPGConfidence, setRPPGConfidence] = useState(0);
   const [geometricScore, setGeometricScore] = useState(0);
 
-  const modeRef = useRef<PipelineMode>('verify');
+  const modeRef = useRef<'verify' | 'enroll'>('verify');
   const userIdRef = useRef('');
   const userNameRef = useRef('');
   const startTimeRef = useRef(0);
-  const enrollmentEmbeddingsRef = useRef<Float32Array[]>([]);
+  const enrollEmbeddingsRef = useRef<Float32Array[]>([]);
   const isProcessingRef = useRef(false);
-
-  // Last known landmarks (set each frame, used for embedding)
   const lastLandmarksRef = useRef<FaceLandmark[] | null>(null);
 
   // ── Controls ───────────────────────────────────────────────────────────────
@@ -92,7 +90,7 @@ export function useCameraPipeline({ mediaPipe, faceRecognition }: Props): UseCam
   const resetInternal = () => {
     geometric.reset();
     rPPG.reset();
-    enrollmentEmbeddingsRef.current = [];
+    enrollEmbeddingsRef.current = [];
     lastLandmarksRef.current = null;
     isProcessingRef.current = false;
     setResult(null);
@@ -103,10 +101,11 @@ export function useCameraPipeline({ mediaPipe, faceRecognition }: Props): UseCam
     setGeometricScore(0);
   };
 
-  const startVerification = useCallback((userId: string) => {
+  const startVerification = useCallback((userId: string, name = '') => {
     resetInternal();
     modeRef.current = 'verify';
     userIdRef.current = userId;
+    userNameRef.current = name;
     startTimeRef.current = Date.now();
     setPhase('detecting');
   }, []);
@@ -162,10 +161,9 @@ export function useCameraPipeline({ mediaPipe, faceRecognition }: Props): UseCam
       setGeometricScore(geoResult.score);
     }
 
-    // Step 3: rPPG — proxy pixel buffer from base64 bytes
+    // Step 3: rPPG proxy pixels
     const proxyPixels = buildProxyPixels(base64Jpeg, frameWidth, frameHeight);
     rPPG.addFrame(proxyPixels, landmarks, frameWidth, frameHeight);
-
     const rPPGResult = rPPG.getResult();
     if (rPPGResult) {
       setCurrentBpm(rPPGResult.pulseFrequency);
@@ -173,17 +171,17 @@ export function useCameraPipeline({ mediaPipe, faceRecognition }: Props): UseCam
     }
 
     // Step 4: Liveness gate
-    const geometricPass = (geoResult?.score ?? 0) >= LIVENESS.GEOMETRIC_SCORE_MIN;
+    const geoPass = (geoResult?.score ?? 0) >= LIVENESS.GEOMETRIC_SCORE_MIN;
     const rPPGPass = (rPPGResult?.confidence ?? 0) >= RPPG.CONFIDENCE_MIN
                     && (rPPGResult?.heartbeatDetected ?? false);
 
-    if (!geometricPass || !rPPGPass) return;
+    if (!geoPass || !rPPGPass) return;
 
     // Step 5: Face embedding from landmarks
     setPhase('recognizing');
     const embedding = faceRecognition.generateEmbeddingFromLandmarks(landmarks);
     if (!embedding) {
-      setResult({ passed: false, failureReason: 'Could not generate face embedding' });
+      setResult({ passed: false, failureReason: 'Could not generate face embedding — ensure face is visible' });
       setPhase('done');
       return;
     }
@@ -198,26 +196,17 @@ export function useCameraPipeline({ mediaPipe, faceRecognition }: Props): UseCam
   };
 
   const handleEnrollment = async (embedding: Float32Array, bpm: number) => {
-    enrollmentEmbeddingsRef.current.push(embedding);
-    const needed = RECOGNITION.ENROLLMENT_FRAMES;
-
-    if (enrollmentEmbeddingsRef.current.length < needed) {
+    enrollEmbeddingsRef.current.push(embedding);
+    if (enrollEmbeddingsRef.current.length < RECOGNITION.ENROLLMENT_FRAMES) {
       setPhase('liveness'); // collect more frames
       return;
     }
 
     try {
-      const averaged = averageEmbeddings(enrollmentEmbeddingsRef.current);
-      await saveBiometric(userIdRef.current, averaged);
-
-      // Update name in Personnel table
-      const { db } = await import('@database/schema');
-      await db.transactionAsync(async (tx) => {
-        await tx.executeSqlAsync(
-          'UPDATE Personnel SET name = ? WHERE id = ?',
-          [userNameRef.current, userIdRef.current]
-        );
-      });
+      const averaged = averageEmbeddings(enrollEmbeddingsRef.current);
+      // saveBiometric now takes (userId, name, embedding) — 3 args
+      const ok = await saveBiometric(userIdRef.current, userNameRef.current, averaged);
+      if (!ok) throw new Error('saveBiometric returned false');
 
       setResult({
         passed: true,
@@ -234,26 +223,23 @@ export function useCameraPipeline({ mediaPipe, faceRecognition }: Props): UseCam
   const handleVerification = async (embedding: Float32Array, bpm: number, rPPGConf: number) => {
     try {
       const embeddingArr = faceRecognition.embeddingToNumberArray(embedding);
-      const { matched, score } = await matchBiometric(userIdRef.current, embeddingArr);
+      // matchBiometric returns { match, score } (not { matched, score })
+      const { match, score } = await matchBiometric(userIdRef.current, embeddingArr) as { match: boolean; score: number };
       const latencyMs = Date.now() - startTimeRef.current;
 
-      if (matched) {
+      if (match) {
         await logAttendance(userIdRef.current, score, bpm, null);
-
-        const { db } = await import('@database/schema');
-        let personName = userIdRef.current;
-        await db.transactionAsync(async (tx) => {
-          const res = await tx.executeSqlAsync(
-            'SELECT name FROM Personnel WHERE id = ?', [userIdRef.current]
-          );
-          personName = (res.rows[0]?.name as string) ?? userIdRef.current;
+        setResult({
+          passed: true,
+          name: userNameRef.current,
+          bpm,
+          confidence: score,
+          latencyMs,
         });
-
-        setResult({ passed: true, name: personName, bpm, confidence: score, latencyMs });
       } else {
         setResult({
           passed: false, bpm, confidence: score, latencyMs,
-          failureReason: score < 0.3 ? 'Face not recognised' : 'Confidence below threshold',
+          failureReason: score < 0.3 ? 'Face not recognised — try enrolling again' : 'Confidence below threshold',
         });
       }
     } catch (err) {
@@ -269,17 +255,16 @@ export function useCameraPipeline({ mediaPipe, faceRecognition }: Props): UseCam
   };
 }
 
-// ─── Utility ──────────────────────────────────────────────────────────────────
+// ─── Proxy pixel builder ──────────────────────────────────────────────────────
 
 function buildProxyPixels(base64Jpeg: string, width: number, height: number): Uint8ClampedArray {
   const raw = base64Jpeg.includes(',') ? base64Jpeg.split(',')[1] : base64Jpeg;
   let bytes: Uint8Array;
   try {
-    const binary = atob(raw);
-    bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const bin = atob(raw);
+    bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   } catch { bytes = new Uint8Array(0); }
-
   const pixelCount = width * height;
   const rgba = new Uint8ClampedArray(pixelCount * 4);
   for (let i = 0; i < pixelCount; i++) {

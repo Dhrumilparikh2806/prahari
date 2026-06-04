@@ -1,239 +1,145 @@
 <!DOCTYPE html>
 <!--
-  mediapipe_bridge.html — Offline MediaPipe FaceLandmarker Bridge
+  mediapipe_bridge.html — PRAHARI MediaPipe FaceLandmarker Bridge
   ================================================================
-  This page is loaded inside a hidden WebView by useMediaPipe.ts.
-  It bridges the @mediapipe/tasks-vision library (a web package) into React Native.
+  Loads @mediapipe/tasks-vision from CDN (cached after first load).
+  The device needs internet once for CDN caching; after that it works offline.
 
-  Communication protocol:
-    Host → WebView  (postMessage): JSON string with one of:
-      { type: 'INIT', modelBase64: '<base64 task bundle>' }
-        → Initialise FaceLandmarker with the model data.
-
-      { type: 'PROCESS_FRAME', imageBase64: '<data:image/jpeg;base64,...>' }
-        → Run landmark detection on the frame and post results back.
-
-      { type: 'RESET' }
-        → Reinitialise (useful if the model gets into a bad state).
-
-    WebView → Host (window.ReactNativeWebView.postMessage): JSON string:
-      { type: 'READY' }
-        → FaceLandmarker loaded and ready to process frames.
-
-      { type: 'LANDMARKS', landmarks: [{x, y, z}...], count: 468 }
-        → 468-point landmark array for a detected face.
-
-      { type: 'NO_FACE' }
-        → Frame processed; no face detected.
-
-      { type: 'ERROR', message: '...' }
-        → Any initialisation or inference error.
-
-  Offline operation:
-    The task file is bundled into the APK/IPA as an asset and passed to this
-    page as a base64 blob via postMessage.  No CDN or internet access required.
-
-  IMPORTANT: This file must be served as a local asset (included via metro.config.js
-  assetExts).  The @mediapipe/tasks-vision CDN script tags below reference the
-  unpkg.com CDN only as a FALLBACK for development builds that have internet.
-  For the production build, the library is bundled inline via the task file.
+  Protocol (WebView ↔ React Native):
+    RN → WebView:  { type: 'PROCESS_FRAME', imageBase64: '<data:image/jpeg;base64,...>', seq: number }
+    WebView → RN:  { type: 'READY' }
+                   { type: 'LANDMARKS', landmarks: [{x,y,z}×468], frameWidth, frameHeight, seq }
+                   { type: 'NO_FACE', seq }
+                   { type: 'ERROR', message }
 -->
 <html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <style>
-    body { margin: 0; padding: 0; background: transparent; }
-    canvas { display: none; }
-    img { display: none; }
-  </style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>body{margin:0;background:transparent;} canvas,img{display:none;}</style>
 </head>
 <body>
-  <!-- Hidden canvas used to draw base64 frames for MediaPipe processing -->
-  <canvas id="canvas"></canvas>
-  <!-- Hidden image element used to decode base64 JPEG into drawable form -->
-  <img id="img" />
+<canvas id="c"></canvas>
+<img id="img">
+<script>
+'use strict';
 
-  <script>
-    'use strict';
+var faceLandmarker = null;
+var isReady = false;
 
-    /* ── State ─────────────────────────────────────────────────────────────── */
-    var faceLandmarker = null;
-    var isReady = false;
-    var FaceLandmarkerClass = null;
-    var FilesetResolverClass = null;
+/* Post message to React Native */
+function post(data) {
+  if (window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify(data));
+  }
+}
 
-    /* ── Utility: post message back to React Native ─────────────────────────── */
-    function postToRN(data) {
-      if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage(JSON.stringify(data));
-      } else {
-        // Development: log to console
-        console.log('[mediapipe_bridge] →RN:', JSON.stringify(data).slice(0, 200));
-      }
-    }
-
-    /* ── Load MediaPipe tasks-vision via CDN (fallback for dev builds) ──────── */
-    function loadScript(src) {
-      return new Promise(function(resolve, reject) {
-        var s = document.createElement('script');
-        s.src = src;
-        s.onload = resolve;
-        s.onerror = reject;
-        document.head.appendChild(s);
-      });
-    }
-
-    async function loadMediaPipe() {
-      try {
-        // Try loading from the bundled copy first (production)
-        // In production, metro includes the tasks-vision bundle in the app
-        if (typeof globalThis.mediapipe !== 'undefined') {
-          FaceLandmarkerClass = globalThis.mediapipe.FaceLandmarker;
-          FilesetResolverClass = globalThis.mediapipe.FilesetResolver;
-          return;
-        }
-
-        // Fallback: load from unpkg CDN (requires network — dev only)
-        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/vision_bundle.js');
-        FaceLandmarkerClass = window.FaceLandmarker;
-        FilesetResolverClass = window.FilesetResolver;
-      } catch (err) {
-        postToRN({ type: 'ERROR', message: 'Failed to load MediaPipe: ' + String(err) });
-        throw err;
-      }
-    }
-
-    /* ── Initialise FaceLandmarker with model data ──────────────────────────── */
-    async function initFaceLandmarker(modelBase64) {
-      try {
-        await loadMediaPipe();
-
-        if (!FaceLandmarkerClass || !FilesetResolverClass) {
-          throw new Error('MediaPipe classes not available');
-        }
-
-        // Convert base64 task bundle to ArrayBuffer for FaceLandmarker
-        var binary = atob(modelBase64);
-        var bytes = new Uint8Array(binary.length);
-        for (var i = 0; i < binary.length; i++) {
-          bytes[i] = binary.charCodeAt(i);
-        }
-        var modelBuffer = bytes.buffer;
-
-        // FilesetResolver can use an in-memory wasm blob; for simplicity we
-        // use the CDN-hosted wasm. In a fully offline build, bundle the wasm too.
-        var vision = await FilesetResolverClass.forVisionTasks(
-          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
-        );
-
-        faceLandmarker = await FaceLandmarkerClass.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetBuffer: modelBuffer,
-            delegate: 'CPU',  // GPU delegate may not be available in WebView
-          },
-          outputFaceBlendshapes: false,
-          outputFacialTransformationMatrixes: false,
-          runningMode: 'IMAGE',   // IMAGE mode for per-frame processing
-          numFaces: 1,            // PRAHARI only needs the primary face
-        });
-
-        isReady = true;
-        postToRN({ type: 'READY' });
-      } catch (err) {
-        postToRN({ type: 'ERROR', message: 'FaceLandmarker init failed: ' + String(err) });
-      }
-    }
-
-    /* ── Process one frame ──────────────────────────────────────────────────── */
-    async function processFrame(imageBase64) {
-      if (!isReady || !faceLandmarker) {
-        postToRN({ type: 'ERROR', message: 'FaceLandmarker not ready' });
-        return;
-      }
-
-      try {
-        var canvas = document.getElementById('canvas');
-        var ctx = canvas.getContext('2d');
-        var img = document.getElementById('img');
-
-        // Load base64 image into the hidden <img> element
-        await new Promise(function(resolve, reject) {
-          img.onload = resolve;
-          img.onerror = reject;
-          img.src = imageBase64.startsWith('data:') ? imageBase64 : 'data:image/jpeg;base64,' + imageBase64;
-        });
-
-        // Draw image onto canvas at its natural size
-        canvas.width = img.naturalWidth;
-        canvas.height = img.naturalHeight;
-        ctx.drawImage(img, 0, 0);
-
-        // Run MediaPipe FaceLandmarker on the canvas
-        var result = faceLandmarker.detect(canvas);
-
-        if (!result || !result.faceLandmarks || result.faceLandmarks.length === 0) {
-          postToRN({ type: 'NO_FACE' });
-          return;
-        }
-
-        // result.faceLandmarks[0] is an array of 468 {x, y, z} normalised points
-        var landmarks = result.faceLandmarks[0].map(function(lm) {
-          return { x: lm.x, y: lm.y, z: lm.z || 0 };
-        });
-
-        postToRN({
-          type: 'LANDMARKS',
-          landmarks: landmarks,
-          count: landmarks.length,
-          frameWidth: canvas.width,
-          frameHeight: canvas.height,
-        });
-      } catch (err) {
-        postToRN({ type: 'ERROR', message: 'Frame processing error: ' + String(err) });
-      }
-    }
-
-    /* ── Message handler ────────────────────────────────────────────────────── */
-    window.addEventListener('message', async function(event) {
-      var msg;
-      try {
-        msg = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-      } catch (e) {
-        postToRN({ type: 'ERROR', message: 'Invalid JSON from host: ' + String(event.data).slice(0, 100) });
-        return;
-      }
-
-      switch (msg.type) {
-        case 'INIT':
-          await initFaceLandmarker(msg.modelBase64);
-          break;
-
-        case 'PROCESS_FRAME':
-          await processFrame(msg.imageBase64);
-          break;
-
-        case 'RESET':
-          if (faceLandmarker) {
-            try { faceLandmarker.close(); } catch (_) {}
-            faceLandmarker = null;
-            isReady = false;
-          }
-          postToRN({ type: 'RESET_ACK' });
-          break;
-
-        default:
-          postToRN({ type: 'ERROR', message: 'Unknown message type: ' + msg.type });
-      }
+/* Load MediaPipe from CDN and initialize FaceLandmarker */
+async function init() {
+  try {
+    // Load vision bundle from CDN (cached by WebView after first load)
+    await new Promise(function(resolve, reject) {
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/vision_bundle.js';
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
     });
 
-    /* ── Also handle postMessage from Android WebView (different event source) ─ */
-    document.addEventListener('message', async function(event) {
-      window.dispatchEvent(new MessageEvent('message', { data: event.data }));
+    var FilesetResolver = window.FilesetResolver;
+    var FaceLandmarker = window.FaceLandmarker;
+
+    if (!FilesetResolver || !FaceLandmarker) {
+      throw new Error('MediaPipe classes not found after script load');
+    }
+
+    var vision = await FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
+    );
+
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+        delegate: 'CPU'
+      },
+      outputFaceBlendshapes: false,
+      outputFacialTransformationMatrixes: false,
+      runningMode: 'IMAGE',
+      numFaces: 1
     });
 
-    /* ── Signal that the page JS has loaded ────────────────────────────────── */
-    postToRN({ type: 'PAGE_LOADED' });
-  </script>
+    isReady = true;
+    post({ type: 'READY' });
+  } catch (err) {
+    post({ type: 'ERROR', message: 'FaceLandmarker init failed: ' + String(err) });
+  }
+}
+
+/* Process one camera frame */
+async function processFrame(imageBase64, seq) {
+  if (!isReady || !faceLandmarker) {
+    post({ type: 'ERROR', message: 'Not ready' });
+    return;
+  }
+
+  try {
+    var canvas = document.getElementById('c');
+    var ctx = canvas.getContext('2d');
+    var img = document.getElementById('img');
+
+    /* Load JPEG into hidden <img> */
+    await new Promise(function(resolve, reject) {
+      img.onload = resolve;
+      img.onerror = reject;
+      img.src = imageBase64.startsWith('data:') ? imageBase64
+              : 'data:image/jpeg;base64,' + imageBase64;
+    });
+
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
+
+    var result = faceLandmarker.detect(canvas);
+
+    if (!result || !result.faceLandmarks || result.faceLandmarks.length === 0) {
+      post({ type: 'NO_FACE', seq: seq });
+      return;
+    }
+
+    var landmarks = result.faceLandmarks[0].map(function(lm) {
+      return { x: lm.x, y: lm.y, z: lm.z || 0 };
+    });
+
+    post({
+      type: 'LANDMARKS',
+      landmarks: landmarks,
+      count: landmarks.length,
+      frameWidth: canvas.width,
+      frameHeight: canvas.height,
+      seq: seq
+    });
+  } catch (err) {
+    post({ type: 'ERROR', message: 'Frame error: ' + String(err) });
+  }
+}
+
+/* Listen for messages from React Native */
+window.addEventListener('message', function(event) {
+  var msg;
+  try { msg = JSON.parse(event.data); } catch (_) { return; }
+
+  if (msg.type === 'PROCESS_FRAME') {
+    processFrame(msg.imageBase64, msg.seq || 0);
+  }
+});
+
+/* Android WebView fires 'message' on document */
+document.addEventListener('message', function(event) {
+  window.dispatchEvent(new MessageEvent('message', { data: event.data }));
+});
+
+/* Start initialization immediately */
+init();
+</script>
 </body>
 </html>

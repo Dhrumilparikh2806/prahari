@@ -1,10 +1,14 @@
 /**
- * schema.ts — SQLite via expo-sqlite v13 (Expo SDK 50)
+ * schema.ts — SQLite Database Init via expo-sqlite v13
  *
- * expo-sqlite v13 API used here:
- *   SQLite.openDatabase(name)          → SQLiteDatabase (sync open)
+ * expo-sqlite v13 API:
+ *   SQLite.openDatabase(name)          → SQLiteDatabase (sync)
  *   db.transactionAsync(async tx => )  → async transaction
- *   tx.executeSqlAsync(sql, params)    → { rows: { _array: any[] } }
+ *   tx.executeSqlAsync(sql, params)    → { rows: any[], rowsAffected: number }
+ *
+ * Note: openDatabase is sync and safe to call at module load time.
+ * initDatabase() must be called (and awaited) once in _layout.tsx before
+ * any other DB operation.
  */
 
 import * as SQLite from 'expo-sqlite';
@@ -12,7 +16,11 @@ import * as SQLite from 'expo-sqlite';
 export const db = SQLite.openDatabase('prahari_v1.sqlite');
 
 /**
- * Creates all tables on first launch.  Call once from app/_layout.tsx.
+ * Creates all tables on first launch and stamps schema version.
+ * Re-entrant safe — CREATE TABLE IF NOT EXISTS is idempotent.
+ *
+ * @throws If any SQL statement fails (e.g. disk full, corrupt DB).
+ *         The caller (_layout.tsx) is responsible for surfacing this to the user.
  */
 export async function initDatabase(): Promise<void> {
   await db.transactionAsync(async (tx) => {
@@ -21,7 +29,7 @@ export async function initDatabase(): Promise<void> {
         id            TEXT PRIMARY KEY,
         name          TEXT NOT NULL,
         enc_embedding TEXT NOT NULL,
-        iv            TEXT NOT NULL,
+        iv            TEXT NOT NULL DEFAULT '',
         enrolled_at   INTEGER NOT NULL
       )
     `);
@@ -41,7 +49,7 @@ export async function initDatabase(): Promise<void> {
 
     await tx.executeSqlAsync(`
       CREATE TABLE IF NOT EXISTS SchemaVersion (
-        version INTEGER NOT NULL
+        version INTEGER PRIMARY KEY
       )
     `);
 
@@ -49,12 +57,14 @@ export async function initDatabase(): Promise<void> {
       'SELECT version FROM SchemaVersion LIMIT 1'
     );
     if (versionRes.rows.length === 0) {
-      await tx.executeSqlAsync('INSERT INTO SchemaVersion (version) VALUES (?)', [1]);
+      await tx.executeSqlAsync('INSERT INTO SchemaVersion (version) VALUES (1)');
     }
   });
+
+  console.log('[schema] Database initialised successfully');
 }
 
-/** DEV only — destroys all data */
+/** DEV/TEST only — destroys all data and re-initialises. */
 export async function resetDatabase(confirm: string): Promise<void> {
   if (confirm !== 'DESTROY_ALL_DATA') throw new Error('Explicit confirmation required');
   await db.transactionAsync(async (tx) => {

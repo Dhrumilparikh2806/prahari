@@ -185,15 +185,20 @@ export default function VerifyScreen() {
         </View>
       )}
 
-      <WebView
-        ref={mediaPipe.webViewRef}
-        source={mediaPipe.htmlSource ?? { html: '<html/>', baseUrl: '' }}
-        style={styles.hidden}
-        onMessage={mediaPipe.onMessage}
-        javaScriptEnabled
-        originWhitelist={['*']}
-        mixedContentMode="always"
-      />
+      {mediaPipe.htmlUri ? (
+        <WebView
+          ref={mediaPipe.webViewRef}
+          source={{ uri: mediaPipe.htmlUri }}
+          style={styles.hidden}
+          onMessage={mediaPipe.onMessage}
+          javaScriptEnabled
+          originWhitelist={['*']}
+          allowFileAccess={true}
+          allowFileAccessFromFileURLs={true}
+          allowUniversalAccessFromFileURLs={true}
+          mixedContentMode="always"
+        />
+      ) : null}
 
       <CameraOverlay phase={pipeline.phase} landmarks={null} livenessPass={livenessPass} instruction={getInstruction()} />
 

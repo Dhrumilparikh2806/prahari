@@ -87,6 +87,11 @@ async function init() {
   }
 }
 
+// Auto-timeout: if CDN takes >60s, report error so UI doesn't freeze
+setTimeout(() => {
+  if (!isReady) post({ type: "ERROR", message: "MediaPipe load timeout — check internet connection" });
+}, 60000);
+
 async function processFrame(imageBase64, seq) {
   if (!isReady || !faceLandmarker) return;
   try {

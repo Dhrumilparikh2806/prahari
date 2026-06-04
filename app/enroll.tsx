@@ -163,16 +163,15 @@ export default function EnrollScreen() {
         </View>
       )}
 
-      {mediaPipe.htmlUri ? (
-        <WebView
-          ref={mediaPipe.webViewRef}
-          source={{ uri: mediaPipe.htmlUri }}
-          style={styles.hiddenWebView}
-          onMessage={mediaPipe.onMessage}
-          javaScriptEnabled
-          originWhitelist={['*']}
-        />
-      ) : null}
+      <WebView
+        ref={mediaPipe.webViewRef}
+        source={mediaPipe.htmlSource ?? { html: '<html/>', baseUrl: '' }}
+        style={styles.hiddenWebView}
+        onMessage={mediaPipe.onMessage}
+        javaScriptEnabled
+        originWhitelist={['*']}
+        mixedContentMode="always"
+      />
 
       <CameraOverlay phase={pipeline.phase} landmarks={null} livenessPass={livenessPass} instruction={getInstruction()} />
 

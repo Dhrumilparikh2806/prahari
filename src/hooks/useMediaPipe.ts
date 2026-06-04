@@ -50,10 +50,12 @@ const BRIDGE_HTML = `<!DOCTYPE html>
 <body>
 <canvas id="c"></canvas>
 <img id="img">
-<script>
-'use strict';
-var faceLandmarker = null;
-var isReady = false;
+<script type="module">
+// ES module import — vision_bundle.mjs exports FaceLandmarker and FilesetResolver
+import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/vision_bundle.mjs";
+
+let faceLandmarker = null;
+let isReady = false;
 
 function post(data) {
   if (window.ReactNativeWebView) {
@@ -63,97 +65,67 @@ function post(data) {
 
 async function init() {
   try {
-    await new Promise(function(resolve, reject) {
-      var s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/vision_bundle.js';
-      s.onload = resolve;
-      s.onerror = function(e) { reject(new Error('CDN load failed: ' + e)); };
-      document.head.appendChild(s);
-    });
-
-    var FilesetResolver = window.FilesetResolver;
-    var FaceLandmarker = window.FaceLandmarker;
-
-    if (!FilesetResolver || !FaceLandmarker) {
-      throw new Error('MediaPipe classes not found');
-    }
-
-    var vision = await FilesetResolver.forVisionTasks(
-      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm'
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
     );
 
     faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: {
-        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
-        delegate: 'CPU'
+        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "CPU"
       },
       outputFaceBlendshapes: false,
       outputFacialTransformationMatrixes: false,
-      runningMode: 'IMAGE',
+      runningMode: "IMAGE",
       numFaces: 1
     });
 
     isReady = true;
-    post({ type: 'READY' });
+    post({ type: "READY" });
   } catch (err) {
-    post({ type: 'ERROR', message: 'Init failed: ' + String(err) });
+    post({ type: "ERROR", message: "Init failed: " + String(err) });
   }
 }
 
 async function processFrame(imageBase64, seq) {
-  if (!isReady || !faceLandmarker) {
-    post({ type: 'ERROR', message: 'Not ready' });
-    return;
-  }
+  if (!isReady || !faceLandmarker) return;
   try {
-    var canvas = document.getElementById('c');
-    var ctx = canvas.getContext('2d');
-    var img = document.getElementById('img');
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+    const img = document.getElementById("img");
 
-    await new Promise(function(resolve, reject) {
+    await new Promise((resolve, reject) => {
       img.onload = resolve;
       img.onerror = reject;
-      img.src = imageBase64.startsWith('data:') ? imageBase64 : 'data:image/jpeg;base64,' + imageBase64;
+      img.src = imageBase64.startsWith("data:") ? imageBase64 : "data:image/jpeg;base64," + imageBase64;
     });
 
     canvas.width = img.naturalWidth;
     canvas.height = img.naturalHeight;
     ctx.drawImage(img, 0, 0);
 
-    var result = faceLandmarker.detect(canvas);
+    const result = faceLandmarker.detect(canvas);
 
-    if (!result || !result.faceLandmarks || result.faceLandmarks.length === 0) {
-      post({ type: 'NO_FACE', seq: seq });
+    if (!result?.faceLandmarks?.length) {
+      post({ type: "NO_FACE", seq });
       return;
     }
 
-    var landmarks = result.faceLandmarks[0].map(function(lm) {
-      return { x: lm.x, y: lm.y, z: lm.z || 0 };
-    });
-
-    post({
-      type: 'LANDMARKS',
-      landmarks: landmarks,
-      count: landmarks.length,
-      frameWidth: canvas.width,
-      frameHeight: canvas.height,
-      seq: seq
-    });
+    const landmarks = result.faceLandmarks[0].map(lm => ({ x: lm.x, y: lm.y, z: lm.z || 0 }));
+    post({ type: "LANDMARKS", landmarks, count: landmarks.length, frameWidth: canvas.width, frameHeight: canvas.height, seq });
   } catch (err) {
-    post({ type: 'ERROR', message: 'Frame error: ' + String(err) });
+    post({ type: "ERROR", message: "Frame error: " + String(err) });
   }
 }
 
-window.addEventListener('message', function(event) {
-  var msg;
-  try { msg = JSON.parse(event.data); } catch (_) { return; }
-  if (msg.type === 'PROCESS_FRAME') {
-    processFrame(msg.imageBase64, msg.seq || 0);
-  }
+// Listen from React Native
+window.addEventListener("message", (event) => {
+  let msg;
+  try { msg = JSON.parse(event.data); } catch { return; }
+  if (msg.type === "PROCESS_FRAME") processFrame(msg.imageBase64, msg.seq || 0);
 });
-
-document.addEventListener('message', function(event) {
-  window.dispatchEvent(new MessageEvent('message', { data: event.data }));
+document.addEventListener("message", (event) => {
+  window.dispatchEvent(new MessageEvent("message", { data: event.data }));
 });
 
 init();

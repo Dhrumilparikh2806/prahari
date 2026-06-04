@@ -43,6 +43,17 @@
         {
           "cameraPermissionText": "PRAHARI needs camera access for face recognition and liveness detection."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "minSdkVersion": 26,
+            "kotlinVersion": "1.8.0"
+          }
+        }
       ]
     ],
     "scheme": "prahari",

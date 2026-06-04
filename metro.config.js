@@ -2,17 +2,9 @@ const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
 
-// Bundle all binary assets for offline operation — no CDN needed
-config.resolver.assetExts.push(
-  'tflite',  // MobileFaceNet INT8 model
-  'task',    // MediaPipe face landmark model
-  'bin',
-  'ort',
-  'html',    // MediaPipe WebView bridge
-  'wasm',    // MediaPipe WASM runtime (offline)
-  'mjs',     // MediaPipe JS bundle (offline)
-);
+// Bundle ML model files and bridge HTML as assets
+config.resolver.assetExts.push('tflite', 'task', 'bin', 'ort', 'html');
 
-config.resolver.sourceExts = ['js', 'jsx', 'json', 'ts', 'tsx', 'cjs'];
+config.resolver.sourceExts = ['js', 'jsx', 'json', 'ts', 'tsx', 'cjs', 'mjs'];
 
 module.exports = config;

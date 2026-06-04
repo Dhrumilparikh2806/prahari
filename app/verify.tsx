@@ -197,6 +197,8 @@ export default function VerifyScreen() {
           allowFileAccessFromFileURLs={true}
           allowUniversalAccessFromFileURLs={true}
           mixedContentMode="always"
+          cacheEnabled={true}
+          cacheMode="LOAD_CACHE_ELSE_NETWORK"
         />
       ) : null}
 

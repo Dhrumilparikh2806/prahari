@@ -203,7 +203,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 40,
+    marginVertical: 20,
+    maxHeight: 400,  // prevents text from being centered in a 1900px void on large screens
   },
   logoMark: {
     width: 80,

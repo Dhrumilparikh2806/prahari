@@ -50,6 +50,7 @@ export default function TabsLayout() {
     <Tabs
       tabBar={(props) => <MinimalTabBar {...props} />}
       screenOptions={{ headerShown: false }}
+      safeAreaInsets={{ top: 0 }}
     >
       <Tabs.Screen name="index"     options={{ headerShown: false }} />
       <Tabs.Screen name="verify"    options={{ headerShown: false }} />

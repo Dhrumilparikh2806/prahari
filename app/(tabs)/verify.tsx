@@ -7,9 +7,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ActivityIndicator, FlatList, StatusBar, Modal,
+  ActivityIndicator, FlatList, Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Camera, CameraType } from 'expo-camera';
 import { useFocusEffect } from 'expo-router';
 import { useMediaPipeContext } from '@context/MediaPipeContext';
@@ -33,6 +33,7 @@ export default function VerifyScreen() {
   const [holdSeconds, setHoldSeconds] = useState(0);
   const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const mediaPipe = useMediaPipeContext();
   const faceRecognition = useFaceRecognition();
@@ -103,7 +104,6 @@ export default function VerifyScreen() {
         onRequestClose={onCloseScan}
       >
         <View style={styles.scanContainer}>
-          <StatusBar barStyle="light-content" backgroundColor="#000" />
           {permission?.granted ? (
             <Camera ref={cameraRef} style={StyleSheet.absoluteFill} type={CameraType.front} />
           ) : null}
@@ -125,18 +125,17 @@ export default function VerifyScreen() {
           {pipeline.phase === 'done' && pipeline.result ? (
             <ResultCard result={pipeline.result} onRetry={handleRetry} onDone={() => { stopCapture(); pipeline.reset(); setIsScanning(false); }} />
           ) : null}
-          <SafeAreaView style={styles.scanTopBar} edges={['top']}>
+          <View style={[styles.scanTopBar, { paddingTop: insets.top + 12 }]}>
             <TouchableOpacity style={styles.closeBtn} onPress={onCloseScan}>
               <Text style={styles.closeBtnText}>✕</Text>
             </TouchableOpacity>
             <Text style={styles.scanTitle}>Verifying: {selectedPersonnel?.name}</Text>
-          </SafeAreaView>
+          </View>
         </View>
       </Modal>
 
       {/* ── Personnel selector ──────────────────────────────────────────────── */}
-      <SafeAreaView style={styles.safe}>
-        <StatusBar barStyle="dark-content" backgroundColor={TERRA.BACKGROUND} />
+      <View style={[styles.safe, { paddingTop: insets.top }]}>
 
         {/* Header */}
         <View style={styles.header}>
@@ -230,7 +229,7 @@ export default function VerifyScreen() {
 
           <Text style={styles.sessionToken}>SESSION TOKEN: PR-8821-X9</Text>
         </View>
-      </SafeAreaView>
+      </View>
     </>
   );
 }

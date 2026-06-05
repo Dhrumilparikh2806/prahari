@@ -7,14 +7,15 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  FlatList, ActivityIndicator, RefreshControl, StatusBar,
+  FlatList, ActivityIndicator, RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { getRecentLogs, getPendingCount, markSynced, purgeSyncedLogs, AttendanceLog } from '@database/attendance';
 import { TERRA, FONTS } from '@config/constants';
 
 export default function DashboardScreen() {
+  const insets = useSafeAreaInsets();
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
@@ -46,8 +47,7 @@ export default function DashboardScreen() {
   const syncedCount = logs.filter(l => l.synced).length;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={TERRA.BACKGROUND} />
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
 
       {/* Header */}
       <View style={styles.header}>
@@ -151,7 +151,7 @@ export default function DashboardScreen() {
           <Text style={styles.liveText}>LIVE CONNECTION</Text>
         </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 

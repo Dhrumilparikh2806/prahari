@@ -76,8 +76,8 @@ export default function RootLayout() {
           cacheMode="LOAD_CACHE_ELSE_NETWORK"
         />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: TERRA.BACKGROUND, flex: 1 }, animation: 'fade' }}>
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="enroll" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="enroll" options={{ headerShown: false, animation: 'slide_from_bottom', presentation: 'modal' }} />
         </Stack>
       </GestureHandlerRootView>
     </MediaPipeProvider>

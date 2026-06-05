@@ -14,9 +14,9 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, ActivityIndicator, StatusBar, Share, Alert,
+  ScrollView, ActivityIndicator, Share, Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMediaPipeContext } from '@context/MediaPipeContext';
 import { getRecentLogs } from '@database/attendance';
 import { cosineSimilarity } from '@utils/math';
@@ -152,6 +152,8 @@ export default function BenchmarkScreen() {
     } catch { }
   }, [runs]);
 
+  const insets = useSafeAreaInsets();
+
   const passCount = runs.filter(r => r.totalMs < 800).length;
   const allPass = runs.length === 10 && passCount === 10;
   const maxTotal = Math.max(...runs.map(r => r.totalMs), 800);
@@ -162,9 +164,8 @@ export default function BenchmarkScreen() {
   const totalStat = stat(runs.map(r => r.totalMs));
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={TERRA.BACKGROUND} />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
         {/* Header */}
         <View style={styles.header}>
@@ -307,7 +308,7 @@ export default function BenchmarkScreen() {
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 

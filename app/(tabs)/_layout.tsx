@@ -72,11 +72,12 @@ export default function TabsLayout() {
     <Tabs
       tabBar={(props) => <TerraTabBar {...props} />}
       screenOptions={{ headerShown: false }}
+      sceneContainerStyle={{ flex: 1 }}
     >
-      <Tabs.Screen name="index" />
-      <Tabs.Screen name="verify" />
-      <Tabs.Screen name="dashboard" />
-      <Tabs.Screen name="benchmark" />
+      <Tabs.Screen name="index"     options={{ headerShown: false }} />
+      <Tabs.Screen name="verify"    options={{ headerShown: false }} />
+      <Tabs.Screen name="dashboard" options={{ headerShown: false }} />
+      <Tabs.Screen name="benchmark" options={{ headerShown: false }} />
     </Tabs>
   );
 }

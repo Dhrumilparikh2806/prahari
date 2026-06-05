@@ -6,15 +6,16 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, StatusBar,
+  ScrollView,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { getPendingCount, getRecentLogs } from '@database/attendance';
 import { TERRA, FONTS } from '@config/constants';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [pendingCount, setPendingCount] = useState(0);
   const [totalRecords, setTotalRecords] = useState(0);
 
@@ -34,9 +35,9 @@ export default function HomeScreen() {
   const lastSyncText = pendingCount === 0 ? 'Up to date' : `${pendingCount} pending`;
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={TERRA.BACKGROUND} />
+    <View style={[styles.safe, { paddingTop: insets.top }]}>
       <ScrollView
+        style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
@@ -121,18 +122,16 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: TERRA.BACKGROUND },
-
-  // ScrollView content starts from top, fills full screen
+  scroll: { flex: 1 },
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
-    flexGrow: 1,
   },
 
   header: {

@@ -1,4 +1,4 @@
-# PRAHARI — Claude Code Master Build Guide
+# PRAHARI — Master Build Guide
 > **Submission deadline: 05 June 2026 · 2 days remaining**  
 > React Native + Expo 50 · Offline face recognition + liveness + ZK vault  
 > NHAI Innovation Hackathon 7.0
@@ -831,7 +831,7 @@ Build slides in this order — judges read top to bottom:
 
 ---
 
-## Section 10 — File Build Order for Claude Code
+## Section 10 — File Build Order
 
 Follow this exact sequence. Each step depends on the previous.
 

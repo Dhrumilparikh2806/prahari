@@ -6,13 +6,12 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  SafeAreaView, ScrollView, StatusBar, Dimensions,
+  ScrollView, StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { getPendingCount, getRecentLogs } from '@database/attendance';
 import { TERRA, FONTS } from '@config/constants';
-
-const { height: SCREEN_H } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -76,7 +75,7 @@ export default function HomeScreen() {
             <View style={styles.cardCheckBg}><Text style={styles.cardCheck}>✓</Text></View>
           </View>
           <Text style={styles.primaryCardTitle}>VERIFY IDENTITY</Text>
-          <Text style={styles.primaryCardSub}>Face & Fingerprint matching</Text>
+          <Text style={styles.primaryCardSub}>Face and liveness matching</Text>
         </TouchableOpacity>
 
         {/* ── Enroll Card ── */}
@@ -116,8 +115,8 @@ export default function HomeScreen() {
           <View style={styles.protocolText}>
             <Text style={styles.protocolTitle}>PROTOCOL V2.4 ACTIVE</Text>
             <Text style={styles.protocolBody}>
-              Ensuring secure biometric encryption standards even in remote tunnel
-              and highway stretches with limited connectivity.
+              Protecting local biometric records during tunnel and highway
+              attendance checks with limited connectivity.
             </Text>
           </View>
         </View>
@@ -133,7 +132,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 20,
     paddingBottom: 32,
-    minHeight: SCREEN_H * 0.85, // ensures content fills screen on large phones
+    flexGrow: 1,
   },
 
   header: {

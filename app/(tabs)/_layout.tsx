@@ -7,6 +7,7 @@
 
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { TERRA, FONTS } from '@config/constants';
 
@@ -29,8 +30,9 @@ const LABELS: Record<string, string> = {
 // ─── Custom tab bar ───────────────────────────────────────────────────────────
 
 function TerraTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.tabBar}>
+    <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       {state.routes.map((route, index) => {
         const isFocused = state.index === index;
         const label = LABELS[route.name] ?? route.name;
@@ -87,7 +89,6 @@ const styles = StyleSheet.create({
     backgroundColor: TERRA.BACKGROUND,
     borderTopWidth: 1,
     borderTopColor: TERRA.BORDER,
-    paddingBottom: 20,
     paddingTop: 10,
     paddingHorizontal: 8,
   },

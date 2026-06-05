@@ -6,9 +6,10 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, SafeAreaView,
-  ActivityIndicator, FlatList, StatusBar,
+  View, Text, TouchableOpacity, StyleSheet,
+  ActivityIndicator, FlatList, StatusBar, Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, CameraType } from 'expo-camera';
 import WebView from 'react-native-webview';
 import { useFocusEffect } from 'expo-router';
@@ -90,150 +91,148 @@ export default function VerifyScreen() {
   const handleRetry = () => { setHoldSeconds(0); pipeline.reset(); setIsScanning(false); stopCapture(); };
   const livenessPass = pipeline.rPPGConfidence >= RPPG.CONFIDENCE_MIN && pipeline.geometricScore >= LIVENESS.GEOMETRIC_SCORE_MIN;
 
-  // ── Camera scanning overlay ──────────────────────────────────────────────────
+  // ── Camera scanning overlay (full-screen Modal) ──────────────────────────────
 
-  if (isScanning || pipeline.phase === 'done') {
-    return (
-      <View style={styles.scanContainer}>
-        <StatusBar barStyle="light-content" />
-        {permission?.granted ? (
-          <Camera ref={cameraRef} style={StyleSheet.absoluteFill} type={CameraType.front} />
-        ) : null}
-        <CameraOverlay phase={pipeline.phase} landmarks={null} livenessPass={livenessPass}
-          instruction={pipeline.blinkCount < LIVENESS.MIN_BLINKS ? 'Blink twice naturally' :
-            !pipeline.headInFrame ? 'Look directly at camera' :
-            holdSeconds < 2 ? `Hold still… ${2 - holdSeconds}s` :
-            !pipeline.currentBpm ? 'Reading heartbeat…' : 'Matching identity…'} />
-        <View style={styles.scanLiveness}>
-          <LivenessIndicator blinkCount={pipeline.blinkCount} headInFrame={pipeline.headInFrame}
-            holdComplete={holdSeconds >= 2} bpm={pipeline.currentBpm}
-            heartbeatDetected={pipeline.rPPGConfidence >= RPPG.CONFIDENCE_MIN} />
-        </View>
-        <View style={styles.scanHeartbeat}>
-          <HeartbeatPulse bpm={pipeline.currentBpm} confidence={pipeline.rPPGConfidence}
-            heartbeatDetected={pipeline.rPPGConfidence >= RPPG.CONFIDENCE_MIN}
-            frameCount={pipeline.currentBpm > 0 ? RPPG.MIN_FRAMES : 0} />
-        </View>
-        {pipeline.phase === 'done' && pipeline.result ? (
-          <ResultCard result={pipeline.result} onRetry={handleRetry} onDone={() => { stopCapture(); pipeline.reset(); setIsScanning(false); }} />
-        ) : null}
-        <SafeAreaView style={styles.scanTopBar}>
-          <TouchableOpacity style={styles.closeBtn} onPress={() => { stopCapture(); pipeline.reset(); setIsScanning(false); }}>
-            <Text style={styles.closeBtnText}>✕</Text>
-          </TouchableOpacity>
-          <Text style={styles.scanTitle}>Verifying: {selectedPersonnel?.name}</Text>
-        </SafeAreaView>
-      </View>
-    );
-  }
-
-  // ── Personnel selector ────────────────────────────────────────────────────────
+  const onCloseScan = () => { stopCapture(); pipeline.reset(); setIsScanning(false); };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={TERRA.BACKGROUND} />
-
-      {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerShield}>◈</Text>
-          <Text style={styles.headerTitle}>Prahari</Text>
+    <>
+      <Modal
+        visible={isScanning || pipeline.phase === 'done'}
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={onCloseScan}
+      >
+        <View style={styles.scanContainer}>
+          <StatusBar barStyle="light-content" backgroundColor="#000" />
+          {permission?.granted ? (
+            <Camera ref={cameraRef} style={StyleSheet.absoluteFill} type={CameraType.front} />
+          ) : null}
+          <CameraOverlay phase={pipeline.phase} landmarks={null} livenessPass={livenessPass}
+            instruction={pipeline.blinkCount < LIVENESS.MIN_BLINKS ? 'Blink twice naturally' :
+              !pipeline.headInFrame ? 'Look directly at camera' :
+              holdSeconds < 2 ? `Hold still… ${2 - holdSeconds}s` :
+              !pipeline.currentBpm ? 'Reading heartbeat…' : 'Matching identity…'} />
+          <View style={styles.scanLiveness}>
+            <LivenessIndicator blinkCount={pipeline.blinkCount} headInFrame={pipeline.headInFrame}
+              holdComplete={holdSeconds >= 2} bpm={pipeline.currentBpm}
+              heartbeatDetected={pipeline.rPPGConfidence >= RPPG.CONFIDENCE_MIN} />
+          </View>
+          <View style={styles.scanHeartbeat}>
+            <HeartbeatPulse bpm={pipeline.currentBpm} confidence={pipeline.rPPGConfidence}
+              heartbeatDetected={pipeline.rPPGConfidence >= RPPG.CONFIDENCE_MIN}
+              frameCount={pipeline.currentBpm > 0 ? RPPG.MIN_FRAMES : 0} />
+          </View>
+          {pipeline.phase === 'done' && pipeline.result ? (
+            <ResultCard result={pipeline.result} onRetry={handleRetry} onDone={() => { stopCapture(); pipeline.reset(); setIsScanning(false); }} />
+          ) : null}
+          <SafeAreaView style={styles.scanTopBar} edges={['top']}>
+            <TouchableOpacity style={styles.closeBtn} onPress={onCloseScan}>
+              <Text style={styles.closeBtnText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.scanTitle}>Verifying: {selectedPersonnel?.name}</Text>
+          </SafeAreaView>
         </View>
-        <TouchableOpacity style={styles.settingsBtn}>
-          <Text style={styles.settingsIcon}>⚙</Text>
-        </TouchableOpacity>
-      </View>
+      </Modal>
 
-      <View style={styles.content}>
-        <Text style={styles.screenTitle}>VERIFY IDENTITY</Text>
-        <Text style={styles.screenSub}>Select personnel then tap Start Scan.</Text>
+      {/* ── Personnel selector ──────────────────────────────────────────────── */}
+      <SafeAreaView style={styles.safe}>
+        <StatusBar barStyle="dark-content" backgroundColor={TERRA.BACKGROUND} />
 
-        {loadingPersonnel ? (
-          <ActivityIndicator color={TERRA.PRIMARY} size="large" style={{ marginTop: 40 }} />
-        ) : personnel.length === 0 ? (
-          /* ── Awaiting Input state (no personnel) ── */
-          <View style={styles.awaitingBox}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerShield}>◈</Text>
+            <Text style={styles.headerTitle}>Prahari</Text>
+          </View>
+          <TouchableOpacity style={styles.settingsBtn}>
+            <Text style={styles.settingsIcon}>⚙</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.content}>
+          <Text style={styles.screenTitle}>VERIFY IDENTITY</Text>
+          <Text style={styles.screenSub}>Select personnel then tap Start Scan.</Text>
+
+          {loadingPersonnel ? (
+            <ActivityIndicator color={TERRA.PRIMARY} size="large" style={{ marginTop: 40 }} />
+          ) : personnel.length === 0 ? (
+            <View style={styles.awaitingBox}>
+              <View style={styles.fingerprintBox}>
+                <Text style={styles.fingerprintIcon}>◉</Text>
+                <Text style={styles.awaitingLabel}>AWAITING INPUT</Text>
+              </View>
+              <Text style={styles.awaitingHint}>No personnel enrolled yet</Text>
+            </View>
+          ) : (
+            <>
+              {selectedPersonnel ? (
+                <View style={styles.officerCard}>
+                  <View style={styles.officerAvatar}>
+                    <Text style={styles.officerAvatarText}>
+                      {selectedPersonnel.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.officerInfo}>
+                    <Text style={styles.officerRole}>Assigned Officer</Text>
+                    <Text style={styles.officerName}>{selectedPersonnel.name}</Text>
+                  </View>
+                  <Text style={styles.chevron}>›</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.sectorCard}>
+                <Text style={styles.sectorIcon}>▦</Text>
+                <View>
+                  <Text style={styles.sectorRole}>Sector</Text>
+                  <Text style={styles.sectorName}>Strategic Perimeter B-4</Text>
+                </View>
+              </View>
+
+              <FlatList
+                data={personnel}
+                keyExtractor={p => p.id}
+                style={styles.list}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={[styles.personnelRow, selectedPersonnel?.id === item.id && styles.personnelRowActive]}
+                    onPress={() => setSelectedPersonnel(item)}
+                  >
+                    <View style={[styles.radioCircle, selectedPersonnel?.id === item.id && styles.radioActive]} />
+                    <Text style={styles.personnelName}>{item.name}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </>
+          )}
+
+          <View style={styles.scanArea}>
             <View style={styles.fingerprintBox}>
               <Text style={styles.fingerprintIcon}>◉</Text>
               <Text style={styles.awaitingLabel}>AWAITING INPUT</Text>
             </View>
-            <Text style={styles.awaitingHint}>No personnel enrolled yet</Text>
+            <Text style={styles.scanHint}>Position face in the camera frame</Text>
           </View>
-        ) : (
-          <>
-            {/* Officer card */}
-            {selectedPersonnel ? (
-              <View style={styles.officerCard}>
-                <View style={styles.officerAvatar}>
-                  <Text style={styles.officerAvatarText}>
-                    {selectedPersonnel.name.charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={styles.officerInfo}>
-                  <Text style={styles.officerRole}>Assigned Officer</Text>
-                  <Text style={styles.officerName}>{selectedPersonnel.name}</Text>
-                </View>
-                <Text style={styles.chevron}>›</Text>
+
+          <TouchableOpacity
+            style={[styles.startBtn, (!selectedPersonnel || !mediaPipe.ready) && styles.startBtnOff]}
+            onPress={startCapture}
+            disabled={!selectedPersonnel || !mediaPipe.ready}
+          >
+            {!mediaPipe.ready ? (
+              <View style={styles.loadingRow}>
+                <ActivityIndicator color={TERRA.WHITE} size="small" />
+                <Text style={styles.startBtnText}>Loading AI…</Text>
               </View>
-            ) : null}
+            ) : (
+              <Text style={styles.startBtnText}>START SCAN</Text>
+            )}
+          </TouchableOpacity>
 
-            {/* Sector card */}
-            <View style={styles.sectorCard}>
-              <Text style={styles.sectorIcon}>▦</Text>
-              <View>
-                <Text style={styles.sectorRole}>Sector</Text>
-                <Text style={styles.sectorName}>Strategic Perimeter B-4</Text>
-              </View>
-            </View>
-
-            {/* Personnel list */}
-            <FlatList
-              data={personnel}
-              keyExtractor={p => p.id}
-              style={styles.list}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[styles.personnelRow, selectedPersonnel?.id === item.id && styles.personnelRowActive]}
-                  onPress={() => setSelectedPersonnel(item)}
-                >
-                  <View style={[styles.radioCircle, selectedPersonnel?.id === item.id && styles.radioActive]} />
-                  <Text style={styles.personnelName}>{item.name}</Text>
-                </TouchableOpacity>
-              )}
-            />
-          </>
-        )}
-
-        {/* Scan area */}
-        <View style={styles.scanArea}>
-          <View style={styles.fingerprintBox}>
-            <Text style={styles.fingerprintIcon}>◉</Text>
-            <Text style={styles.awaitingLabel}>AWAITING INPUT</Text>
-          </View>
-          <Text style={styles.scanHint}>Place finger on the illuminated area</Text>
+          <Text style={styles.sessionToken}>SESSION TOKEN: PR-8821-X9</Text>
         </View>
-
-        {/* CTA */}
-        <TouchableOpacity
-          style={[styles.startBtn, (!selectedPersonnel || !mediaPipe.ready) && styles.startBtnOff]}
-          onPress={startCapture}
-          disabled={!selectedPersonnel || !mediaPipe.ready}
-        >
-          {!mediaPipe.ready ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color={TERRA.WHITE} size="small" />
-              <Text style={styles.startBtnText}>Loading AI…</Text>
-            </View>
-          ) : (
-            <Text style={styles.startBtnText}>
-              {selectedPersonnel ? `START SCAN` : 'START SCAN'}
-            </Text>
-          )}
-        </TouchableOpacity>
-
-        <Text style={styles.sessionToken}>SESSION TOKEN: PR-8821-X9</Text>
-      </View>
-    </SafeAreaView>
+      </SafeAreaView>
+    </>
   );
 }
 

@@ -2,34 +2,185 @@
  * useMediaPipe.ts — Offline-Capable MediaPipe FaceLandmarker Bridge
  *
  * Offline strategy: WebView HTTP cache (Android system WebView / Chromium).
- *
- * How offline operation works:
- *   FIRST LAUNCH (needs WiFi, ~15–30 seconds):
- *     - MediaPipe WASM (~21 MB) and model (~3.6 MB) downloaded from CDN
- *     - Chromium's HTTP cache stores them on device (persistent across app restarts)
- *
- *   ALL SUBSEQUENT LAUNCHES (zero network required):
- *     - cacheMode="LOAD_CACHE_ELSE_NETWORK" forces WebView to use cached files
- *     - MediaPipe initialises in 2–4 seconds from local cache
- *     - Works in airplane mode / zero-network field environments
- *
- * This is the standard "offline-first" pattern used by PWAs and is
- * equivalent to bundling the files locally without the APK size penalty.
- *
- * APK size stays at ~92 MB (no 21 MB WASM bundle needed).
+ * Bridge HTML is inlined as a string so no file:// URI is needed — this is
+ * critical on Android where <script type="module"> imports are blocked from
+ * file:// origins. Using { html, baseUrl: CDN } makes the page appear to
+ * come from the CDN origin, allowing ES module imports to work.
  */
 
 import { useState, useRef, useCallback } from 'react';
-import { Asset } from 'expo-asset';
+
+// ─── Inline bridge HTML ───────────────────────────────────────────────────────
+// Embedded as a string so the WebView can be loaded with baseUrl pointing at
+// the CDN — this is the only way ES module imports work on Android WebView
+// (file:// origin blocks cross-origin ES module imports).
+
+const BRIDGE_HTML = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>body{margin:0;background:transparent;}canvas,img{display:none;}</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<img id="img">
+<script type="module">
+import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/vision_bundle.mjs";
+
+let faceLandmarker = null;
+let isReady = false;
+
+function post(data) {
+  if (window.ReactNativeWebView) {
+    window.ReactNativeWebView.postMessage(JSON.stringify(data));
+  }
+}
+
+const timeout = setTimeout(() => {
+  if (!isReady) post({ type: 'ERROR', message: 'AI model load timeout. Connect to WiFi for first launch, then it works offline.' });
+}, 90000);
+
+async function init() {
+  try {
+    post({ type: "LOG", message: "Loading WASM..." });
+    const wasmUrls = [
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm",
+      "https://unpkg.com/@mediapipe/tasks-vision@0.10.0/wasm",
+    ];
+    let vision = null;
+    for (const url of wasmUrls) {
+      try {
+        post({ type: "LOG", message: "Trying WASM: " + url });
+        vision = await FilesetResolver.forVisionTasks(url);
+        post({ type: "LOG", message: "WASM loaded from: " + url });
+        break;
+      } catch(e) {
+        post({ type: "LOG", message: "Failed: " + url });
+      }
+    }
+    if (!vision) throw new Error("All WASM sources failed");
+
+    post({ type: "LOG", message: "Loading model..." });
+    const modelUrls = [
+      "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm/face_landmarker.task",
+    ];
+
+    let lastErr;
+    for (const modelUrl of modelUrls) {
+      try {
+        faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: modelUrl, delegate: "CPU" },
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: false,
+          runningMode: "IMAGE",
+          numFaces: 1
+        });
+        post({ type: "LOG", message: "Model loaded from: " + modelUrl });
+        break;
+      } catch (e) {
+        lastErr = e;
+        post({ type: "LOG", message: "Model URL failed: " + modelUrl });
+      }
+    }
+
+    if (!faceLandmarker) throw lastErr;
+
+    clearTimeout(timeout);
+    isReady = true;
+    post({ type: "READY" });
+  } catch (err) {
+    clearTimeout(timeout);
+    post({ type: "ERROR", message: "Init failed: " + String(err) });
+  }
+}
+
+async function processFrame(imageBase64, seq) {
+  if (!isReady || !faceLandmarker) return;
+  try {
+    const canvas = document.getElementById("c");
+    const ctx    = canvas.getContext("2d");
+    const img    = document.getElementById("img");
+
+    await new Promise((resolve, reject) => {
+      img.onload  = resolve;
+      img.onerror = reject;
+      img.src = imageBase64.startsWith("data:") ? imageBase64
+              : "data:image/jpeg;base64," + imageBase64;
+    });
+
+    canvas.width  = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    ctx.drawImage(img, 0, 0);
+
+    const result = faceLandmarker.detect(canvas);
+
+    if (!result || !result.faceLandmarks || !result.faceLandmarks.length) {
+      post({ type: "NO_FACE", seq });
+      return;
+    }
+
+    const landmarks = result.faceLandmarks[0].map(
+      lm => ({ x: lm.x, y: lm.y, z: lm.z || 0 })
+    );
+
+    // Extract real cheek pixel averages for rPPG (landmarks 50 = left cheek, 280 = right cheek)
+    const cheekPixels = [];
+    const CHEEK_R = 12;
+    for (const lmIdx of [50, 280]) {
+      const lm = landmarks[lmIdx];
+      if (!lm) continue;
+      const cx = Math.floor(lm.x * canvas.width);
+      const cy = Math.floor(lm.y * canvas.height);
+      const x = Math.max(0, cx - CHEEK_R);
+      const y = Math.max(0, cy - CHEEK_R);
+      const w = Math.min(canvas.width - x, CHEEK_R * 2);
+      const h = Math.min(canvas.height - y, CHEEK_R * 2);
+      if (w <= 0 || h <= 0) continue;
+      try {
+        const patch = ctx.getImageData(x, y, w, h).data;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < patch.length; i += 4) {
+          r += patch[i]; g += patch[i+1]; b += patch[i+2]; n++;
+        }
+        if (n > 0) cheekPixels.push({ r: r/n, g: g/n, b: b/n });
+      } catch(e) {}
+    }
+
+    post({ type: "LANDMARKS", landmarks, count: landmarks.length,
+           frameWidth: canvas.width, frameHeight: canvas.height,
+           cheekPixels, seq });
+  } catch (err) {
+    post({ type: "ERROR", message: "Frame error: " + String(err) });
+  }
+}
+
+window.addEventListener("message", (e) => {
+  let msg; try { msg = JSON.parse(e.data); } catch { return; }
+  if (msg.type === "PROCESS_FRAME") processFrame(msg.imageBase64, msg.seq || 0);
+});
+document.addEventListener("message", (e) => {
+  window.dispatchEvent(new MessageEvent("message", { data: e.data }));
+});
+
+init();
+<\/script>
+</body>
+</html>`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface FaceLandmark { x: number; y: number; z: number; }
 
+export interface CheekPixel { r: number; g: number; b: number; }
+
 export interface MediaPipeResult {
   landmarks: FaceLandmark[] | null;
   frameWidth: number;
   frameHeight: number;
+  /** Average RGB from left + right cheek patches — used by rPPG */
+  cheekPixels: CheekPixel[];
 }
 
 export interface UseMediaPipeState {
@@ -37,9 +188,8 @@ export interface UseMediaPipeState {
   loading: boolean;
   error: string | null;
   webViewRef: React.RefObject<any>;
-  /** file:// URI of the bridge HTML — pass as WebView source */
-  htmlUri: string | null;
-  htmlSource: null;
+  /** Inline HTML string — use as WebView source={{ html, baseUrl: CDN }} */
+  htmlSource: string;
   onMessage: (event: { nativeEvent: { data: string } }) => void;
   processFrame: (imageBase64: string, timeoutMs?: number) => Promise<MediaPipeResult | null>;
 }
@@ -50,7 +200,9 @@ export function useMediaPipe(): UseMediaPipeState {
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [htmlUri, setHtmlUri] = useState<string | null>(null);
+
+  // htmlSource is always available synchronously — no async asset loading needed
+  const htmlSource = BRIDGE_HTML;
 
   const webViewRef = useRef<any>(null);
   const frameSeqRef = useRef(0);
@@ -58,24 +210,6 @@ export function useMediaPipe(): UseMediaPipeState {
     resolve: (r: MediaPipeResult | null) => void;
     timer: ReturnType<typeof setTimeout>;
   }>>(new Map());
-
-  // Load bridge HTML asset URI once on mount
-  const loadStartedRef = useRef(false);
-  if (!loadStartedRef.current) {
-    loadStartedRef.current = true;
-    (async () => {
-      try {
-        const asset = Asset.fromModule(require('../../assets/mediapipe_bridge.html'));
-        await asset.downloadAsync();
-        if (!asset.localUri) throw new Error('Could not resolve mediapipe_bridge.html');
-        setHtmlUri(asset.localUri);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Asset load failed';
-        setError(msg);
-        setLoading(false);
-      }
-    })();
-  }
 
   // ── Message handler ────────────────────────────────────────────────────────
 
@@ -95,6 +229,7 @@ export function useMediaPipe(): UseMediaPipeState {
           landmarks: msg.landmarks as FaceLandmark[],
           frameWidth:  (msg.frameWidth  as number) ?? 480,
           frameHeight: (msg.frameHeight as number) ?? 640,
+          cheekPixels: (msg.cheekPixels as CheekPixel[]) ?? [],
         });
         break;
       }
@@ -147,5 +282,5 @@ export function useMediaPipe(): UseMediaPipeState {
     });
   }, [ready]);
 
-  return { ready, loading, error, webViewRef, htmlUri, htmlSource: null, onMessage, processFrame };
+  return { ready, loading, error, webViewRef, htmlSource, onMessage, processFrame };
 }

@@ -61,22 +61,20 @@ export default function RootLayout() {
     <MediaPipeProvider value={mediaPipe}>
       <GestureHandlerRootView style={styles.root}>
         <StatusBar barStyle="dark-content" backgroundColor={TERRA.BACKGROUND} />
-        {mediaPipe.htmlUri ? (
-          <WebView
-            ref={mediaPipe.webViewRef}
-            source={{ uri: mediaPipe.htmlUri }}
-            style={styles.hiddenWebView}
-            onMessage={mediaPipe.onMessage}
-            javaScriptEnabled
-            originWhitelist={['*']}
-            allowFileAccess={true}
-            allowFileAccessFromFileURLs={true}
-            allowUniversalAccessFromFileURLs={true}
-            mixedContentMode="always"
-            cacheEnabled={true}
-            cacheMode="LOAD_CACHE_ELSE_NETWORK"
-          />
-        ) : null}
+        <WebView
+          ref={mediaPipe.webViewRef}
+          source={{ html: mediaPipe.htmlSource, baseUrl: 'https://cdn.jsdelivr.net' }}
+          style={styles.hiddenWebView}
+          onMessage={mediaPipe.onMessage}
+          javaScriptEnabled
+          originWhitelist={['*']}
+          allowFileAccess={true}
+          allowFileAccessFromFileURLs={true}
+          allowUniversalAccessFromFileURLs={true}
+          mixedContentMode="always"
+          cacheEnabled={true}
+          cacheMode="LOAD_CACHE_ELSE_NETWORK"
+        />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: TERRA.BACKGROUND }, animation: 'fade' }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="enroll" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />

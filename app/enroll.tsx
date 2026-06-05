@@ -8,9 +8,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
-  SafeAreaView, Alert, KeyboardAvoidingView, Platform,
-  ScrollView, StatusBar,
+  Alert, KeyboardAvoidingView, Platform,
+  ScrollView, StatusBar, Modal,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, CameraType } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { useMediaPipeContext } from '@context/MediaPipeContext';
@@ -97,49 +98,51 @@ export default function EnrollScreen() {
   const livenessPass = pipeline.rPPGConfidence >= 0.5 && pipeline.geometricScore >= 0.7;
   const isNameValid = personnelName.trim().length >= 2;
 
-  // ── Scanning view ─────────────────────────────────────────────────────────
+  const instr = !mediaPipe.ready ? 'Initialising AI…' :
+    pipeline.blinkCount < LIVENESS.MIN_BLINKS ? 'Blink naturally twice' :
+    !pipeline.headInFrame ? 'Look straight at the camera' :
+    holdSeconds < 2 ? `Hold still… ${2 - holdSeconds}s` :
+    !pipeline.currentBpm ? 'Reading heartbeat…' : 'Capturing face data…';
 
-  if (screenState === 'scanning' || screenState === 'done') {
-    const instr = !mediaPipe.ready ? 'Initialising AI…' :
-      pipeline.blinkCount < LIVENESS.MIN_BLINKS ? 'Blink naturally twice' :
-      !pipeline.headInFrame ? 'Look straight at the camera' :
-      holdSeconds < 2 ? `Hold still… ${2 - holdSeconds}s` :
-      !pipeline.currentBpm ? 'Reading heartbeat…' : 'Capturing face data…';
-
-    return (
-      <View style={styles.scanContainer}>
-        <StatusBar barStyle="light-content" />
-        {permission?.granted ? (
-          <Camera ref={cameraRef} style={StyleSheet.absoluteFill} type={CameraType.front} />
-        ) : null}
-        <CameraOverlay phase={pipeline.phase} landmarks={null} livenessPass={livenessPass} instruction={instr} />
-        <View style={styles.scanLiveness}>
-          <LivenessIndicator blinkCount={pipeline.blinkCount} headInFrame={pipeline.headInFrame}
-            holdComplete={holdSeconds >= 2} bpm={pipeline.currentBpm}
-            heartbeatDetected={pipeline.rPPGConfidence >= 0.5} />
-        </View>
-        {screenState === 'done' && pipeline.result ? (
-          <ResultCard result={pipeline.result} onRetry={handleRetry} onDone={() => router.back()} />
-        ) : null}
-        <SafeAreaView style={styles.scanTopBar}>
-          <TouchableOpacity style={styles.closeBtn} onPress={() => { stopCapture(); router.back(); }}>
-            <Text style={styles.closeBtnText}>✕</Text>
-          </TouchableOpacity>
-          <Text style={styles.scanTopTitle}>Enrolling: {personnelName}</Text>
-        </SafeAreaView>
-      </View>
-    );
-  }
-
-  // ── Setup view ─────────────────────────────────────────────────────────────
+  const isInScan = screenState === 'scanning' || screenState === 'done';
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <StatusBar barStyle="dark-content" backgroundColor={TERRA.BACKGROUND} />
+    <>
+      {/* ── Full-screen scanning Modal ─────────────────────────────────────── */}
+      <Modal
+        visible={isInScan}
+        animationType="slide"
+        statusBarTranslucent
+        onRequestClose={() => { stopCapture(); router.back(); }}
+      >
+        <View style={styles.scanContainer}>
+          <StatusBar barStyle="light-content" backgroundColor="#000" />
+          {permission?.granted ? (
+            <Camera ref={cameraRef} style={StyleSheet.absoluteFill} type={CameraType.front} />
+          ) : null}
+          <CameraOverlay phase={pipeline.phase} landmarks={null} livenessPass={livenessPass} instruction={instr} />
+          <View style={styles.scanLiveness}>
+            <LivenessIndicator blinkCount={pipeline.blinkCount} headInFrame={pipeline.headInFrame}
+              holdComplete={holdSeconds >= 2} bpm={pipeline.currentBpm}
+              heartbeatDetected={pipeline.rPPGConfidence >= 0.5} />
+          </View>
+          {screenState === 'done' && pipeline.result ? (
+            <ResultCard result={pipeline.result} onRetry={handleRetry} onDone={() => router.back()} />
+          ) : null}
+          <SafeAreaView style={styles.scanTopBar} edges={['top']}>
+            <TouchableOpacity style={styles.closeBtn} onPress={() => { stopCapture(); router.back(); }}>
+              <Text style={styles.closeBtnText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.scanTopTitle}>Enrolling: {personnelName}</Text>
+          </SafeAreaView>
+        </View>
+      </Modal>
+
+      {/* ── Setup view ──────────────────────────────────────────────────────── */}
+      <SafeAreaView style={styles.safe}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
-          {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
               <Text style={styles.backIcon}>‹</Text>
@@ -156,7 +159,6 @@ export default function EnrollScreen() {
           <Text style={styles.screenTitle}>ENROLL PERSONNEL</Text>
           <Text style={styles.screenSub}>Enter the full name before scanning the face.</Text>
 
-          {/* Camera viewfinder */}
           <View style={styles.viewfinder}>
             {permission?.granted ? (
               <Camera ref={cameraRef} style={StyleSheet.absoluteFill} type={CameraType.front} />
@@ -165,19 +167,16 @@ export default function EnrollScreen() {
                 <Text style={styles.noCameraText}>Camera</Text>
               </View>
             )}
-            {/* Face guide overlay */}
             <View style={styles.faceGuide}>
               <View style={styles.faceCircle}>
                 <Text style={styles.faceIcon}>◎</Text>
               </View>
             </View>
-            {/* Ready banner */}
             <View style={styles.readyBanner}>
               <Text style={styles.readyText}>READY FOR CAPTURE</Text>
             </View>
           </View>
 
-          {/* Name input */}
           <Text style={styles.fieldLabel}>FULL NAME</Text>
           <View style={styles.inputRow}>
             <TextInput
@@ -195,7 +194,6 @@ export default function EnrollScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Compliance check */}
           <View style={styles.complianceCard}>
             <View style={styles.complianceHeader}>
               <Text style={styles.complianceCheck}>✓</Text>
@@ -209,7 +207,6 @@ export default function EnrollScreen() {
             ))}
           </View>
 
-          {/* CTA */}
           <TouchableOpacity
             style={[styles.startBtn, !isNameValid && styles.startBtnOff]}
             onPress={handleStartScan}
@@ -219,7 +216,6 @@ export default function EnrollScreen() {
             <Text style={styles.startBtnText}>START FACE SCAN</Text>
           </TouchableOpacity>
 
-          {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>OPERATOR ID: PRH-9921-X</Text>
             <Text style={styles.footerText}>SYSTEM TIMESTAMP: {new Date().toISOString().slice(0, 16).replace('T', ' ')}</Text>
@@ -227,6 +223,7 @@ export default function EnrollScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+    </>
   );
 }
 

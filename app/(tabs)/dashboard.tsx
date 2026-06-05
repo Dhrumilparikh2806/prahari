@@ -7,8 +7,9 @@
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  SafeAreaView, FlatList, ActivityIndicator, RefreshControl, StatusBar,
+  FlatList, ActivityIndicator, RefreshControl, StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { getRecentLogs, getPendingCount, markSynced, purgeSyncedLogs, AttendanceLog } from '@database/attendance';
 import { TERRA, FONTS } from '@config/constants';
@@ -111,7 +112,7 @@ export default function DashboardScreen() {
           <View style={styles.fetchingBox}>
             <Text style={styles.fetchingIcon}>🗄</Text>
             <Text style={styles.fetchingTitle}>FETCHING LOG DATA…</Text>
-            <Text style={styles.fetchingBody}>Accessing encrypted archives on decentralized node.</Text>
+            <Text style={styles.fetchingBody}>Reading protected local attendance records.</Text>
           </View>
         ) : logs.length === 0 ? (
           <View style={styles.fetchingBox}>

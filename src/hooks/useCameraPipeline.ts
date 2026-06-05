@@ -18,9 +18,8 @@ import { averageEmbeddings } from '@utils/imageProcessing';
 import { saveBiometric, matchBiometric } from '@database/vault';
 import { logAttendance } from '@database/attendance';
 import { RECOGNITION, LIVENESS, RPPG } from '@config/constants';
-import type { UseMediaPipeState } from '@hooks/useMediaPipe';
+import type { UseMediaPipeState, FaceLandmark, CheekPixel } from '@hooks/useMediaPipe';
 import type { UseFaceRecognitionState } from '@hooks/useFaceRecognition';
-import type { FaceLandmark } from '@hooks/useMediaPipe';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -161,9 +160,9 @@ export function useCameraPipeline({ mediaPipe, faceRecognition }: Props): UseCam
       setGeometricScore(geoResult.score);
     }
 
-    // Step 3: rPPG proxy pixels
-    const proxyPixels = buildProxyPixels(base64Jpeg, frameWidth, frameHeight);
-    rPPG.addFrame(proxyPixels, landmarks, frameWidth, frameHeight);
+    // Step 3: rPPG — use real cheek pixel averages extracted by the bridge canvas
+    const realPixels = buildRealPixelBuffer(mpResult.cheekPixels, frameWidth, frameHeight);
+    rPPG.addFrame(realPixels, landmarks, frameWidth, frameHeight);
     const rPPGResult = rPPG.getResult();
     if (rPPGResult) {
       setCurrentBpm(rPPGResult.pulseFrequency);
@@ -255,24 +254,51 @@ export function useCameraPipeline({ mediaPipe, faceRecognition }: Props): UseCam
   };
 }
 
-// ─── Proxy pixel builder ──────────────────────────────────────────────────────
+// ─── Real pixel buffer from bridge cheek samples ─────────────────────────────
+// Converts the average cheek RGB values returned by the MediaPipe bridge canvas
+// into the RGBA buffer format expected by useRemotePhotoplethysmography.
+// Each cheek average is placed at the correct landmark pixel position so the
+// rPPG hook's sampleCheekPatch() call returns the real skin colour.
 
-function buildProxyPixels(base64Jpeg: string, width: number, height: number): Uint8ClampedArray {
-  const raw = base64Jpeg.includes(',') ? base64Jpeg.split(',')[1] : base64Jpeg;
-  let bytes: Uint8Array;
-  try {
-    const bin = atob(raw);
-    bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  } catch { bytes = new Uint8Array(0); }
-  const pixelCount = width * height;
-  const rgba = new Uint8ClampedArray(pixelCount * 4);
-  for (let i = 0; i < pixelCount; i++) {
-    const b = i % (bytes.length || 1);
-    rgba[i * 4]     = bytes[b];
-    rgba[i * 4 + 1] = bytes[(b + 1) % (bytes.length || 1)];
-    rgba[i * 4 + 2] = bytes[(b + 2) % (bytes.length || 1)];
-    rgba[i * 4 + 3] = 255;
-  }
+function buildRealPixelBuffer(
+  cheekPixels: CheekPixel[],
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  const rgba = new Uint8ClampedArray(width * height * 4);
+  // Fill with a neutral mid-grey base (avoids zero-signal on sparse buffers)
+  rgba.fill(128);
+  for (let a = 3; a < rgba.length; a += 4) rgba[a] = 255;
+
+  if (!cheekPixels || cheekPixels.length === 0) return rgba;
+
+  // Place each cheek sample at its approximate landmark pixel position.
+  // Landmark 50 ≈ (0.25, 0.55), Landmark 280 ≈ (0.75, 0.55) in normalised coords.
+  const positions = [
+    { nx: 0.25, ny: 0.55 },
+    { nx: 0.75, ny: 0.55 },
+  ];
+
+  const PATCH_R = 20;
+  cheekPixels.forEach((pixel, ci) => {
+    const pos = positions[ci];
+    if (!pos) return;
+    const cx = Math.floor(pos.nx * width);
+    const cy = Math.floor(pos.ny * height);
+    for (let dx = -PATCH_R; dx <= PATCH_R; dx++) {
+      for (let dy = -PATCH_R; dy <= PATCH_R; dy++) {
+        if (dx * dx + dy * dy > PATCH_R * PATCH_R) continue;
+        const px = cx + dx;
+        const py = cy + dy;
+        if (px < 0 || px >= width || py < 0 || py >= height) continue;
+        const idx = (py * width + px) * 4;
+        rgba[idx]     = Math.round(pixel.r);
+        rgba[idx + 1] = Math.round(pixel.g);
+        rgba[idx + 2] = Math.round(pixel.b);
+        rgba[idx + 3] = 255;
+      }
+    }
+  });
+
   return rgba;
 }

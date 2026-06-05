@@ -80,13 +80,14 @@ export function useLivenessChallenge(): UseLivenessChallengeState {
         met = geoResult.eyeMetrics.blinkCount >= LIVENESS.MIN_BLINKS;
         break;
       case 'smile':
-        met = geoResult.mouthMetrics.isSmiling;
+        // mouthMetrics not yet implemented — skip smile challenge
+        met = false;
         break;
       case 'turn_left':
-        met = geoResult.headPose.yaw < -LIVENESS.HEAD_TURN_DEGREES;
+        met = geoResult.headPose.yaw < -LIVENESS.YAW_MAX_DEGREES;
         break;
       case 'turn_right':
-        met = geoResult.headPose.yaw > LIVENESS.HEAD_TURN_DEGREES;
+        met = geoResult.headPose.yaw > LIVENESS.YAW_MAX_DEGREES;
         break;
     }
 

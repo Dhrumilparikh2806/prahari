@@ -1,23 +1,14 @@
-/**
- * (tabs)/_layout.tsx — Terra Bottom Tab Navigator
- *
- * Tabs: Home · Verify · Logs · Stats
- * Design: Terra theme — cream background, forest green active state
- */
-
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { TERRA, FONTS } from '@config/constants';
+import { TERRA } from '@config/constants';
 
-// ─── Tab icon SVG-style shapes using Text ────────────────────────────────────
-
-const ICONS: Record<string, { active: string; inactive: string }> = {
-  index:     { active: '⌂',  inactive: '⌂'  },
-  verify:    { active: '◎',  inactive: '◎'  },
-  dashboard: { active: '▦',  inactive: '▦'  },
-  benchmark: { active: '↗',  inactive: '↗'  },
+const ICONS: Record<string, string> = {
+  index:     '⌂',
+  verify:    '◎',
+  dashboard: '≡',
+  benchmark: '↗',
 };
 
 const LABELS: Record<string, string> = {
@@ -27,16 +18,15 @@ const LABELS: Record<string, string> = {
   benchmark: 'Stats',
 };
 
-// ─── Custom tab bar ───────────────────────────────────────────────────────────
-
-function TerraTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
+function MinimalTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+
   return (
     <View style={[styles.tabBar, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       {state.routes.map((route, index) => {
         const isFocused = state.index === index;
         const label = LABELS[route.name] ?? route.name;
-        const icon = ICONS[route.name];
+        const icon = ICONS[route.name] ?? '●';
 
         const onPress = () => {
           const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
@@ -44,20 +34,10 @@ function TerraTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
         };
 
         return (
-          <TouchableOpacity
-            key={route.key}
-            style={styles.tabItem}
-            onPress={onPress}
-            activeOpacity={0.7}
-          >
-            <View style={[styles.iconWrap, isFocused && styles.iconWrapActive]}>
-              <Text style={[styles.iconText, isFocused && styles.iconTextActive]}>
-                {icon?.active ?? '●'}
-              </Text>
-            </View>
-            <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
-              {label}
-            </Text>
+          <TouchableOpacity key={route.key} style={styles.tabItem} onPress={onPress} activeOpacity={0.6}>
+            <Text style={[styles.tabIcon, isFocused && styles.tabIconActive]}>{icon}</Text>
+            <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>{label}</Text>
+            {isFocused && <View style={styles.activeBar} />}
           </TouchableOpacity>
         );
       })}
@@ -65,14 +45,11 @@ function TerraTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   );
 }
 
-// ─── Layout ───────────────────────────────────────────────────────────────────
-
 export default function TabsLayout() {
   return (
     <Tabs
-      tabBar={(props) => <TerraTabBar {...props} />}
+      tabBar={(props) => <MinimalTabBar {...props} />}
       screenOptions={{ headerShown: false }}
-      sceneContainerStyle={{ flex: 1 }}
     >
       <Tabs.Screen name="index"     options={{ headerShown: false }} />
       <Tabs.Screen name="verify"    options={{ headerShown: false }} />
@@ -82,46 +59,45 @@ export default function TabsLayout() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: TERRA.BACKGROUND,
+    backgroundColor: '#ffffff',
     borderTopWidth: 1,
-    borderTopColor: TERRA.BORDER,
-    paddingTop: 10,
-    paddingHorizontal: 8,
+    borderTopColor: '#e8e2d9',
+    paddingTop: 6,
+    paddingHorizontal: 4,
   },
   tabItem: {
     flex: 1,
     alignItems: 'center',
-    gap: 4,
+    paddingVertical: 4,
+    gap: 2,
+    position: 'relative',
   },
-  iconWrap: {
-    width: 40,
-    height: 32,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
+  tabIcon: {
+    fontSize: 20,
+    color: '#9aaba4',
   },
-  iconWrapActive: {
-    backgroundColor: TERRA.PRIMARY,
-  },
-  iconText: {
-    fontSize: 18,
-    color: TERRA.TEXT_SECONDARY,
-  },
-  iconTextActive: {
-    color: TERRA.WHITE,
+  tabIconActive: {
+    color: TERRA.PRIMARY,
   },
   tabLabel: {
-    fontSize: 11,
-    fontFamily: FONTS.BODY,
-    color: TERRA.TEXT_SECONDARY,
+    fontSize: 10,
+    fontWeight: '500',
+    color: '#9aaba4',
+    letterSpacing: 0.2,
   },
   tabLabelActive: {
     color: TERRA.PRIMARY,
-    fontFamily: FONTS.BODY_MEDIUM,
+    fontWeight: '600',
+  },
+  activeBar: {
+    position: 'absolute',
+    top: -6,
+    width: 20,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: TERRA.PRIMARY,
   },
 });

@@ -1,21 +1,14 @@
-/**
- * (tabs)/dashboard.tsx — Attendance Log · Terra Theme
- *
- * Layout: Header + 3 separate stat cards + tabbed table + fetching state
- */
-
 import React, { useCallback, useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  FlatList, ActivityIndicator, RefreshControl,
+  FlatList, ActivityIndicator, RefreshControl, StatusBar,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import { getRecentLogs, getPendingCount, markSynced, purgeSyncedLogs, AttendanceLog } from '@database/attendance';
-import { TERRA, FONTS } from '@config/constants';
+import { TERRA } from '@config/constants';
 
 export default function DashboardScreen() {
-  const insets = useSafeAreaInsets();
+  const topPad = StatusBar.currentHeight ?? 0;
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
@@ -29,7 +22,7 @@ export default function DashboardScreen() {
       const [recentLogs, pending] = await Promise.all([getRecentLogs(100), getPendingCount()]);
       setLogs(recentLogs);
       setPendingCount(pending);
-    } catch { }
+    } catch {}
     finally { setLoading(false); setRefreshing(false); }
   };
 
@@ -47,154 +40,187 @@ export default function DashboardScreen() {
   const syncedCount = logs.filter(l => l.synced).length;
 
   return (
-    <View style={[styles.safe, { paddingTop: insets.top }]}>
+    <View style={[styles.container, { paddingTop: topPad }]}>
 
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.headerShield}>◈</Text>
-          <Text style={styles.headerTitle}>Prahari</Text>
+        <View>
+          <Text style={styles.appName}>Prahari</Text>
+          <Text style={styles.screenSub}>Attendance Logs</Text>
         </View>
-        <TouchableOpacity style={styles.syncedBadge} onPress={handleSync} disabled={syncing}>
-          {syncing ? <ActivityIndicator size="small" color={TERRA.PRIMARY} /> : (
-            <Text style={styles.syncedText}>{pendingCount === 0 ? 'SYNCED' : `SYNC ${pendingCount}`}</Text>
+        <TouchableOpacity
+          style={[styles.syncBtn, syncing && styles.syncBtnDisabled]}
+          onPress={handleSync}
+          disabled={syncing}
+        >
+          {syncing ? (
+            <ActivityIndicator size="small" color={TERRA.PRIMARY} />
+          ) : (
+            <Text style={styles.syncBtnText}>{pendingCount === 0 ? '✓ Synced' : `↻ Sync ${pendingCount}`}</Text>
           )}
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.settingsBtn}>
-          <Text style={styles.settingsIcon}>⚙</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.content}>
-        {/* Title row */}
-        <View style={styles.titleRow}>
-          <View>
-            <Text style={styles.repoLabel}>DATA REPOSITORY</Text>
-            <Text style={styles.screenTitle}>ATTENDANCE{'\n'}LOG</Text>
+      {/* Stats row */}
+      <View style={styles.statsRow}>
+        <View style={styles.statItem}>
+          <Text style={styles.statValue}>{totalRecords}</Text>
+          <Text style={styles.statLabel}>Total</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={[styles.statValue, pendingCount > 0 && styles.statAmber]}>{pendingCount}</Text>
+          <Text style={styles.statLabel}>Pending</Text>
+        </View>
+        <View style={styles.statDivider} />
+        <View style={styles.statItem}>
+          <Text style={[styles.statValue, { color: TERRA.PRIMARY }]}>{syncedCount}</Text>
+          <Text style={styles.statLabel}>Synced</Text>
+        </View>
+      </View>
+
+      {/* Table header */}
+      <View style={styles.tableHeader}>
+        <Text style={[styles.colLabel, { flex: 2 }]}>PERSONNEL</Text>
+        <Text style={styles.colLabel}>CONF</Text>
+        <Text style={styles.colLabel}>BPM</Text>
+        <Text style={styles.colLabel}>SY</Text>
+      </View>
+
+      {/* Content */}
+      {loading ? (
+        <View style={styles.stateBox}>
+          <ActivityIndicator color={TERRA.PRIMARY} size="large" />
+          <Text style={styles.stateText}>Loading records…</Text>
+        </View>
+      ) : logs.length === 0 ? (
+        <View style={styles.stateBox}>
+          <View style={styles.stateIconBg}>
+            <Text style={styles.stateIcon}>▦</Text>
           </View>
-          <TouchableOpacity style={styles.refreshBtn} onPress={handleRefresh}>
-            <Text style={styles.refreshIcon}>↻</Text>
-            <Text style={styles.refreshLabel}>REFRESH{'\n'}LOGS</Text>
-          </TouchableOpacity>
+          <Text style={styles.stateTitle}>No Records Yet</Text>
+          <Text style={styles.stateSub}>Complete a verification to create the first entry.</Text>
         </View>
-
-        {/* 3 separate stat cards */}
-        <View style={styles.statCard}>
-          <Text style={styles.statCardLabel}>TOTAL RECORDS</Text>
-          <Text style={styles.statCardValue}>{totalRecords}</Text>
-          <Text style={styles.statCardUnit}>entries</Text>
-        </View>
-
-        <View style={styles.statCard}>
-          <Text style={styles.statCardLabel}>PENDING SYNC</Text>
-          <Text style={[styles.statCardValue, pendingCount > 0 && { color: TERRA.AMBER }]}>
-            {pendingCount}
-          </Text>
-          <Text style={styles.statCardUnit}>waiting</Text>
-        </View>
-
-        <View style={styles.statCard}>
-          <Text style={styles.statCardLabel}>SYNCED</Text>
-          <Text style={[styles.statCardValue, { color: TERRA.PRIMARY }]}>{syncedCount}</Text>
-          <Text style={styles.statCardUnit}>verified</Text>
-        </View>
-
-        {/* Column headers */}
-        <View style={styles.tableHeader}>
-          <Text style={[styles.colHeader, { flex: 2 }]}>PERSONNEL</Text>
-          <Text style={styles.colHeader}>CONF</Text>
-          <Text style={styles.colHeader}>BPM</Text>
-          <Text style={styles.colHeader}>SY</Text>
-        </View>
-
-        {/* Content */}
-        {loading ? (
-          <View style={styles.fetchingBox}>
-            <Text style={styles.fetchingIcon}>🗄</Text>
-            <Text style={styles.fetchingTitle}>FETCHING LOG DATA…</Text>
-            <Text style={styles.fetchingBody}>Reading protected local attendance records.</Text>
-          </View>
-        ) : logs.length === 0 ? (
-          <View style={styles.fetchingBox}>
-            <Text style={styles.fetchingIcon}>🗄</Text>
-            <Text style={styles.fetchingTitle}>NO RECORDS YET</Text>
-            <Text style={styles.fetchingBody}>Complete a verification to create the first entry.</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={logs}
-            keyExtractor={l => l.id}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={TERRA.PRIMARY} />}
-            renderItem={({ item }) => (
-              <View style={styles.tableRow}>
-                <View style={{ flex: 2 }}>
-                  <Text style={styles.rowName} numberOfLines={1}>{item.personnelId.slice(0, 12)}…</Text>
-                  <Text style={styles.rowTime}>{new Date(item.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</Text>
-                </View>
-                <Text style={styles.rowCell}>{item.confidence > 0 ? `${(item.confidence * 100).toFixed(0)}%` : '—'}</Text>
-                <Text style={styles.rowCell}>{item.bpm > 0 ? item.bpm : '—'}</Text>
-                <Text style={[styles.rowCell, { color: item.synced ? TERRA.PRIMARY : TERRA.AMBER }]}>
-                  {item.synced ? '✓' : '…'}
+      ) : (
+        <FlatList
+          data={logs}
+          keyExtractor={l => l.id}
+          contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor={TERRA.PRIMARY} />
+          }
+          renderItem={({ item }) => (
+            <View style={styles.row}>
+              <View style={{ flex: 2 }}>
+                <Text style={styles.rowName} numberOfLines={1}>
+                  {item.personnelId.slice(0, 14)}…
+                </Text>
+                <Text style={styles.rowTime}>
+                  {new Date(item.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                 </Text>
               </View>
-            )}
-          />
-        )}
+              <Text style={styles.rowCell}>
+                {item.confidence > 0 ? `${(item.confidence * 100).toFixed(0)}%` : '—'}
+              </Text>
+              <Text style={styles.rowCell}>{item.bpm > 0 ? item.bpm : '—'}</Text>
+              <Text style={[styles.rowCell, { color: item.synced ? TERRA.PRIMARY : '#c4854a' }]}>
+                {item.synced ? '✓' : '…'}
+              </Text>
+            </View>
+          )}
+        />
+      )}
 
-        {/* Footer */}
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>SYSTEM_ID: PRH-0882-QX</Text>
-          <Text style={styles.footerText}>STORAGE_IDX: 4.2.0</Text>
-        </View>
-        <View style={styles.liveRow}>
-          <View style={styles.liveDot} />
-          <Text style={styles.liveText}>LIVE CONNECTION</Text>
-        </View>
+      {/* Footer */}
+      <View style={styles.footer}>
+        <View style={styles.footerDot} />
+        <Text style={styles.footerText}>SYSTEM_ID: PRH-0882-QX · STORAGE: 4.2.0</Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: TERRA.BACKGROUND },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12, gap: 8 },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-  headerShield: { fontSize: 20, color: TERRA.PRIMARY },
-  headerTitle: { fontSize: 18, fontWeight: "700", color: TERRA.TEXT },
-  syncedBadge: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: TERRA.PRIMARY },
-  syncedText: { fontSize: 11, fontWeight: "700", color: TERRA.PRIMARY, letterSpacing: 0.5 },
-  settingsBtn: { padding: 8 },
-  settingsIcon: { fontSize: 20, color: TERRA.TEXT_SECONDARY },
-  content: { flex: 1, paddingHorizontal: 20 },
+  container: { flex: 1, backgroundColor: '#f8f5f0' },
 
-  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  repoLabel: { fontSize: 10, fontWeight: "700", color: TERRA.PRIMARY, letterSpacing: 2, marginBottom: 4 },
-  screenTitle: { fontSize: 28, fontFamily: FONTS.HEADLINE, color: TERRA.TEXT, lineHeight: 32 },
-  refreshBtn: { backgroundColor: TERRA.CARD, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: TERRA.BORDER },
-  refreshIcon: { fontSize: 18, color: TERRA.PRIMARY, marginBottom: 2 },
-  refreshLabel: { fontSize: 9, fontWeight: "700", color: TERRA.TEXT_SECONDARY, letterSpacing: 1, textAlign: 'center' },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    paddingBottom: 12,
+  },
+  appName: { fontSize: 22, fontWeight: '700', color: '#1c2b26', letterSpacing: -0.3 },
+  screenSub: { fontSize: 12, color: '#627068', marginTop: 2 },
+  syncBtn: {
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: 20, borderWidth: 1.5, borderColor: TERRA.PRIMARY,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+  },
+  syncBtnDisabled: { opacity: 0.5 },
+  syncBtnText: { fontSize: 12, fontWeight: '600', color: TERRA.PRIMARY },
 
-  statCard: { backgroundColor: TERRA.CARD, borderRadius: 12, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: TERRA.BORDER },
-  statCardLabel: { fontSize: 10, fontWeight: "700", color: TERRA.TEXT_MUTED, letterSpacing: 1.5, marginBottom: 4 },
-  statCardValue: { fontSize: 36, fontFamily: FONTS.HEADLINE, color: TERRA.TEXT, lineHeight: 40 },
-  statCardUnit: { fontSize: 11, color: TERRA.TEXT_MUTED },
+  statsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#ffffff',
+    marginHorizontal: 20,
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: '#e8e2d9',
+  },
+  statItem: { flex: 1, alignItems: 'center', gap: 3 },
+  statValue: { fontSize: 26, fontWeight: '700', color: '#1c2b26', letterSpacing: -0.5 },
+  statAmber: { color: '#c4854a' },
+  statLabel: { fontSize: 11, color: '#9aaba4', fontWeight: '500' },
+  statDivider: { width: 1, height: 28, backgroundColor: '#e8e2d9' },
 
-  tableHeader: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 2, borderBottomColor: TERRA.PRIMARY, marginBottom: 4 },
-  colHeader: { width: 48, fontSize: 10, fontWeight: "700", color: TERRA.PRIMARY, letterSpacing: 0.5 },
+  tableHeader: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderBottomWidth: 1.5,
+    borderBottomColor: TERRA.PRIMARY,
+    marginBottom: 2,
+  },
+  colLabel: { width: 48, fontSize: 10, fontWeight: '700', color: TERRA.PRIMARY, letterSpacing: 0.8 },
 
-  tableRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: TERRA.DIVIDER },
-  rowName: { fontSize: 13, fontWeight: "600", color: TERRA.TEXT },
-  rowTime: { fontSize: 10, color: TERRA.TEXT_MUTED },
-  rowCell: { width: 48, fontSize: 12, fontWeight: "600", color: TERRA.TEXT_SECONDARY },
+  stateBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10 },
+  stateIconBg: {
+    width: 64, height: 64, borderRadius: 18,
+    backgroundColor: '#eef4f0', alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+  },
+  stateIcon: { fontSize: 28, color: TERRA.PRIMARY },
+  stateText: { fontSize: 14, color: '#627068' },
+  stateTitle: { fontSize: 16, fontWeight: '600', color: '#1c2b26' },
+  stateSub: { fontSize: 13, color: '#627068', textAlign: 'center', paddingHorizontal: 24 },
 
-  fetchingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 40, backgroundColor: TERRA.CARD, borderRadius: 12, borderWidth: 1, borderColor: TERRA.BORDER, marginTop: 8 },
-  fetchingIcon: { fontSize: 36, marginBottom: 12 },
-  fetchingTitle: { fontSize: 14, fontWeight: "700", color: TERRA.TEXT, letterSpacing: 1, marginBottom: 8 },
-  fetchingBody: { fontSize: 12, color: TERRA.TEXT_SECONDARY, textAlign: 'center', paddingHorizontal: 20 },
+  listContent: { paddingHorizontal: 20 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#ede8e0',
+  },
+  rowName: { fontSize: 13, fontWeight: '600', color: '#1c2b26' },
+  rowTime: { fontSize: 10, color: '#9aaba4', marginTop: 2 },
+  rowCell: { width: 48, fontSize: 12, fontWeight: '600', color: '#627068' },
 
-  footer: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 12 },
-  footerText: { fontSize: 9, color: TERRA.TEXT_MUTED, letterSpacing: 0.5 },
-  liveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 8 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: TERRA.PRIMARY },
-  liveText: { fontSize: 10, fontWeight: "700", color: TERRA.PRIMARY, letterSpacing: 1 },
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    paddingVertical: 10,
+  },
+  footerDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#c8ddd0' },
+  footerText: { fontSize: 10, color: '#9aaba4', letterSpacing: 0.3 },
 });

@@ -45,14 +45,16 @@ export const TERRA = {
 // ─── Typography ───────────────────────────────────────────────────────────────
 
 export const FONTS = {
-  /** Headline serif — warm personality */
-  HEADLINE: 'Literata_700Bold',
-  HEADLINE_SEMI: 'Literata_600SemiBold',
-  /** Body / labels — friendly rounded */
-  BODY: 'NunitoSans_400Regular',
-  BODY_MEDIUM: 'NunitoSans_600SemiBold',
-  BODY_BOLD: 'NunitoSans_700Bold',
-  /** Fallback if fonts not yet loaded */
+  /**
+   * System serif — similar warmth to Literata, zero download needed.
+   * Android uses "serif" (Noto Serif), iOS uses "Georgia".
+   */
+  HEADLINE: 'Georgia',
+  HEADLINE_SEMI: 'Georgia',
+  /** Body — system default sans (friendly, readable) */
+  BODY: 'System',
+  BODY_MEDIUM: 'System',
+  BODY_BOLD: 'System',
   SERIF_FALLBACK: 'Georgia',
   SANS_FALLBACK: 'System',
 } as const;

@@ -239,12 +239,12 @@ const styles = StyleSheet.create({
   backIcon: { fontSize: 24, color: TERRA.PRIMARY },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
   headerShield: { fontSize: 20, color: TERRA.PRIMARY },
-  headerTitle: { fontSize: 18, fontFamily: FONTS.BODY_BOLD, color: TERRA.TEXT },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: TERRA.TEXT },
   settingsBtn: { padding: 8 },
   settingsIcon: { fontSize: 20, color: TERRA.TEXT_SECONDARY },
 
   screenTitle: { fontSize: 26, fontFamily: FONTS.HEADLINE, color: TERRA.TEXT, letterSpacing: 1, marginBottom: 4 },
-  screenSub: { fontSize: 13, fontFamily: FONTS.BODY, color: TERRA.TEXT_SECONDARY, marginBottom: 16 },
+  screenSub: { fontSize: 13, color: TERRA.TEXT_SECONDARY, marginBottom: 16 },
 
   // Viewfinder
   viewfinder: { height: 200, borderRadius: 16, overflow: 'hidden', backgroundColor: TERRA.SURFACE, marginBottom: 20, position: 'relative' },
@@ -254,12 +254,12 @@ const styles = StyleSheet.create({
   faceCircle: { width: 80, height: 80, borderRadius: 40, borderWidth: 2, borderColor: TERRA.PRIMARY, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(74,124,89,0.15)' },
   faceIcon: { fontSize: 32, color: TERRA.PRIMARY },
   readyBanner: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: TERRA.AMBER, paddingVertical: 8, alignItems: 'center' },
-  readyText: { fontSize: 11, fontFamily: FONTS.BODY_BOLD, color: TERRA.WHITE, letterSpacing: 2 },
+  readyText: { fontSize: 11, fontWeight: "700", color: TERRA.WHITE, letterSpacing: 2 },
 
   // Input
-  fieldLabel: { fontSize: 10, fontFamily: FONTS.BODY_BOLD, color: TERRA.PRIMARY, letterSpacing: 2, marginBottom: 8 },
+  fieldLabel: { fontSize: 10, fontWeight: "700", color: TERRA.PRIMARY, letterSpacing: 2, marginBottom: 8 },
   inputRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: TERRA.CARD, borderRadius: 10, borderWidth: 1, borderColor: TERRA.BORDER, paddingHorizontal: 14, marginBottom: 16 },
-  input: { flex: 1, fontSize: 15, fontFamily: FONTS.BODY, color: TERRA.TEXT, paddingVertical: 14 },
+  input: { flex: 1, fontSize: 15, color: TERRA.TEXT, paddingVertical: 14 },
   editBtn: { padding: 8 },
   editIcon: { fontSize: 16, color: TERRA.TEXT_MUTED },
 
@@ -267,20 +267,20 @@ const styles = StyleSheet.create({
   complianceCard: { backgroundColor: TERRA.CARD, borderRadius: 12, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: TERRA.BORDER },
   complianceHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   complianceCheck: { fontSize: 18, color: TERRA.PRIMARY },
-  complianceTitle: { fontSize: 15, fontFamily: FONTS.BODY_BOLD, color: TERRA.TEXT },
+  complianceTitle: { fontSize: 15, fontWeight: "700", color: TERRA.TEXT },
   complianceItem: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 8 },
   complianceItemIcon: { fontSize: 13, color: TERRA.PRIMARY, marginTop: 1 },
-  complianceItemText: { flex: 1, fontSize: 13, fontFamily: FONTS.BODY, color: TERRA.TEXT_SECONDARY, lineHeight: 18 },
+  complianceItemText: { flex: 1, fontSize: 13, color: TERRA.TEXT_SECONDARY, lineHeight: 18 },
 
   // CTA
   startBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: TERRA.PRIMARY, borderRadius: 12, paddingVertical: 18, marginBottom: 16 },
   startBtnOff: { opacity: 0.4 },
   startIcon: { fontSize: 18, color: TERRA.WHITE },
-  startBtnText: { fontSize: 15, fontFamily: FONTS.BODY_BOLD, color: TERRA.WHITE, letterSpacing: 1.5 },
+  startBtnText: { fontSize: 15, fontWeight: "700", color: TERRA.WHITE, letterSpacing: 1.5 },
 
   // Footer
   footer: { flexDirection: 'row', justifyContent: 'space-between' },
-  footerText: { fontSize: 9, fontFamily: FONTS.BODY, color: TERRA.TEXT_MUTED },
+  footerText: { fontSize: 9, color: TERRA.TEXT_MUTED },
 
   // Scanning overlay
   scanContainer: { flex: 1, backgroundColor: '#000' },
@@ -288,5 +288,5 @@ const styles = StyleSheet.create({
   scanTopBar: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, gap: 12 },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   closeBtnText: { color: '#FFF', fontSize: 16 },
-  scanTopTitle: { color: '#FFF', fontSize: 15, fontFamily: FONTS.BODY_BOLD, flex: 1 },
+  scanTopTitle: { color: '#FFF', fontSize: 15, fontWeight: "700", flex: 1 },
 });

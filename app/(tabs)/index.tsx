@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerShield: { fontSize: 20, color: TERRA.PRIMARY },
-  headerTitle: { fontSize: 18, fontFamily: FONTS.BODY_BOLD, color: TERRA.TEXT },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: TERRA.TEXT },
   settingsBtn: { padding: 8 },
   settingsIcon: { fontSize: 20, color: TERRA.TEXT_SECONDARY },
 
@@ -160,10 +160,10 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginBottom: 12,
   },
   logoEye: { fontSize: 28, color: TERRA.PRIMARY },
-  logoLabel: { fontSize: 9, fontFamily: FONTS.BODY_BOLD, color: TERRA.PRIMARY, letterSpacing: 2 },
+  logoLabel: { fontSize: 9, fontWeight: "700", color: TERRA.PRIMARY, letterSpacing: 2 },
   wordmark: { fontSize: 32, fontFamily: FONTS.HEADLINE, color: TERRA.TEXT, letterSpacing: 6, marginBottom: 4 },
-  tagline: { fontSize: 11, fontFamily: FONTS.BODY_MEDIUM, color: TERRA.TEXT_SECONDARY, letterSpacing: 1.5 },
-  subTagline: { fontSize: 9, fontFamily: FONTS.BODY, color: TERRA.TEXT_MUTED, letterSpacing: 1, marginTop: 4, textAlign: 'center' },
+  tagline: { fontSize: 11, fontWeight: "600", color: TERRA.TEXT_SECONDARY, letterSpacing: 1.5 },
+  subTagline: { fontSize: 9, color: TERRA.TEXT_MUTED, letterSpacing: 1, marginTop: 4, textAlign: 'center' },
 
   // Primary card (Verify)
   primaryCard: {
@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   cardCheckBg: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
   cardCheck: { fontSize: 18, color: TERRA.WHITE },
   primaryCardTitle: { fontSize: 20, fontFamily: FONTS.HEADLINE, color: TERRA.WHITE, letterSpacing: 1, marginBottom: 4 },
-  primaryCardSub: { fontSize: 13, fontFamily: FONTS.BODY, color: 'rgba(255,255,255,0.75)' },
+  primaryCardSub: { fontSize: 13, color: 'rgba(255,255,255,0.75)' },
 
   // Secondary card (Enroll)
   secondaryCard: {
@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   },
   secondaryCardIcon: { fontSize: 20, marginBottom: 8, color: TERRA.TEXT_SECONDARY },
   secondaryCardTitle: { fontSize: 16, fontFamily: FONTS.HEADLINE, color: TERRA.TEXT, letterSpacing: 0.5, marginBottom: 4 },
-  secondaryCardSub: { fontSize: 13, fontFamily: FONTS.BODY, color: TERRA.TEXT_SECONDARY },
+  secondaryCardSub: { fontSize: 13, color: TERRA.TEXT_SECONDARY },
 
   // Stats
   statsRow: {
@@ -197,9 +197,9 @@ const styles = StyleSheet.create({
   },
   statCard: { flex: 1 },
   statDivider: { width: 1, backgroundColor: TERRA.BORDER, marginHorizontal: 16 },
-  statLabel: { fontSize: 9, fontFamily: FONTS.BODY_BOLD, color: TERRA.TEXT_MUTED, letterSpacing: 1.5, marginBottom: 4 },
+  statLabel: { fontSize: 9, fontWeight: "700", color: TERRA.TEXT_MUTED, letterSpacing: 1.5, marginBottom: 4 },
   statValue: { fontSize: 22, fontFamily: FONTS.HEADLINE, color: TERRA.TEXT },
-  statUnit: { fontSize: 10, fontFamily: FONTS.BODY, color: TERRA.TEXT_MUTED, marginTop: 2 },
+  statUnit: { fontSize: 10, color: TERRA.TEXT_MUTED, marginTop: 2 },
   syncRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   syncIcon: { fontSize: 14, color: TERRA.PRIMARY },
 
@@ -211,6 +211,6 @@ const styles = StyleSheet.create({
   },
   protocolIcon: { fontSize: 18, color: TERRA.PRIMARY, marginTop: 2 },
   protocolText: { flex: 1 },
-  protocolTitle: { fontSize: 11, fontFamily: FONTS.BODY_BOLD, color: TERRA.PRIMARY, letterSpacing: 1, marginBottom: 4 },
-  protocolBody: { fontSize: 12, fontFamily: FONTS.BODY, color: TERRA.TEXT_SECONDARY, lineHeight: 18 },
+  protocolTitle: { fontSize: 11, fontWeight: "700", color: TERRA.PRIMARY, letterSpacing: 1, marginBottom: 4 },
+  protocolBody: { fontSize: 12, color: TERRA.TEXT_SECONDARY, lineHeight: 18 },
 });

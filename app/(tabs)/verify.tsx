@@ -242,12 +242,12 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 12 },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerShield: { fontSize: 20, color: TERRA.PRIMARY },
-  headerTitle: { fontSize: 18, fontFamily: FONTS.BODY_BOLD, color: TERRA.TEXT },
+  headerTitle: { fontSize: 18, fontWeight: "700", color: TERRA.TEXT },
   settingsBtn: { padding: 8 },
   settingsIcon: { fontSize: 20, color: TERRA.TEXT_SECONDARY },
   content: { flex: 1, paddingHorizontal: 20, paddingBottom: 16 },
   screenTitle: { fontSize: 28, fontFamily: FONTS.HEADLINE, color: TERRA.TEXT, letterSpacing: 1, marginBottom: 4 },
-  screenSub: { fontSize: 13, fontFamily: FONTS.BODY, color: TERRA.TEXT_SECONDARY, marginBottom: 20 },
+  screenSub: { fontSize: 13, color: TERRA.TEXT_SECONDARY, marginBottom: 20 },
 
   officerCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -255,10 +255,10 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: TERRA.BORDER, marginBottom: 10,
   },
   officerAvatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: TERRA.SURFACE, alignItems: 'center', justifyContent: 'center' },
-  officerAvatarText: { fontSize: 18, fontFamily: FONTS.BODY_BOLD, color: TERRA.PRIMARY },
+  officerAvatarText: { fontSize: 18, fontWeight: "700", color: TERRA.PRIMARY },
   officerInfo: { flex: 1 },
-  officerRole: { fontSize: 10, fontFamily: FONTS.BODY_MEDIUM, color: TERRA.AMBER, letterSpacing: 0.5 },
-  officerName: { fontSize: 15, fontFamily: FONTS.BODY_BOLD, color: TERRA.TEXT },
+  officerRole: { fontSize: 10, fontWeight: "600", color: TERRA.AMBER, letterSpacing: 0.5 },
+  officerName: { fontSize: 15, fontWeight: "700", color: TERRA.TEXT },
   chevron: { fontSize: 20, color: TERRA.TEXT_MUTED },
 
   sectorCard: {
@@ -267,15 +267,15 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: TERRA.BORDER, marginBottom: 16,
   },
   sectorIcon: { fontSize: 20, color: TERRA.AMBER },
-  sectorRole: { fontSize: 10, fontFamily: FONTS.BODY_MEDIUM, color: TERRA.TEXT_MUTED, letterSpacing: 0.5 },
-  sectorName: { fontSize: 14, fontFamily: FONTS.BODY_BOLD, color: TERRA.TEXT },
+  sectorRole: { fontSize: 10, fontWeight: "600", color: TERRA.TEXT_MUTED, letterSpacing: 0.5 },
+  sectorName: { fontSize: 14, fontWeight: "700", color: TERRA.TEXT },
 
   list: { maxHeight: 120, marginBottom: 12 },
   personnelRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, marginBottom: 4 },
   personnelRowActive: { backgroundColor: TERRA.PRIMARY_LIGHT },
   radioCircle: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, borderColor: TERRA.BORDER },
   radioActive: { borderColor: TERRA.PRIMARY, backgroundColor: TERRA.PRIMARY },
-  personnelName: { fontSize: 14, fontFamily: FONTS.BODY_MEDIUM, color: TERRA.TEXT },
+  personnelName: { fontSize: 14, fontWeight: "600", color: TERRA.TEXT },
 
   scanArea: { alignItems: 'center', paddingVertical: 16, marginBottom: 16 },
   fingerprintBox: {
@@ -285,15 +285,15 @@ const styles = StyleSheet.create({
     backgroundColor: TERRA.PRIMARY_LIGHT,
   },
   fingerprintIcon: { fontSize: 48, color: TERRA.PRIMARY, marginBottom: 4 },
-  awaitingLabel: { fontSize: 9, fontFamily: FONTS.BODY_BOLD, color: TERRA.PRIMARY, letterSpacing: 2 },
-  awaitingHint: { fontSize: 12, fontFamily: FONTS.BODY, color: TERRA.TEXT_SECONDARY },
-  scanHint: { fontSize: 12, fontFamily: FONTS.BODY, color: TERRA.TEXT_SECONDARY },
+  awaitingLabel: { fontSize: 9, fontWeight: "700", color: TERRA.PRIMARY, letterSpacing: 2 },
+  awaitingHint: { fontSize: 12, color: TERRA.TEXT_SECONDARY },
+  scanHint: { fontSize: 12, color: TERRA.TEXT_SECONDARY },
 
   startBtn: { backgroundColor: TERRA.PRIMARY, borderRadius: 12, paddingVertical: 16, alignItems: 'center', marginBottom: 10 },
   startBtnOff: { opacity: 0.4 },
-  startBtnText: { fontSize: 15, fontFamily: FONTS.BODY_BOLD, color: TERRA.WHITE, letterSpacing: 1.5 },
+  startBtnText: { fontSize: 15, fontWeight: "700", color: TERRA.WHITE, letterSpacing: 1.5 },
   loadingRow: { flexDirection: 'row', gap: 10, alignItems: 'center' },
-  sessionToken: { textAlign: 'center', fontSize: 10, fontFamily: FONTS.BODY, color: TERRA.TEXT_MUTED, letterSpacing: 1 },
+  sessionToken: { textAlign: 'center', fontSize: 10, color: TERRA.TEXT_MUTED, letterSpacing: 1 },
   awaitingBox: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
 
   // Scan overlay
@@ -303,5 +303,5 @@ const styles = StyleSheet.create({
   scanTopBar: { position: 'absolute', top: 0, left: 0, right: 0, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 12, gap: 12 },
   closeBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center' },
   closeBtnText: { color: '#FFF', fontSize: 16 },
-  scanTitle: { color: '#FFF', fontSize: 15, fontFamily: FONTS.BODY_BOLD, flex: 1 },
+  scanTitle: { color: '#FFF', fontSize: 15, fontWeight: "700", flex: 1 },
 });

@@ -13,13 +13,19 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'rea
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
+import WebView from 'react-native-webview';
 import { initDatabase } from '@database/schema';
 import { startNetworkMonitor } from '@services/networkMonitor';
+import { useMediaPipe } from '@hooks/useMediaPipe';
+import { MediaPipeProvider } from '@context/MediaPipeContext';
 import { UI } from '@config/constants';
 
 export default function RootLayout() {
   const [dbReady, setDbReady] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
+
+  // MediaPipe lives here — persists across all screen navigations
+  const mediaPipe = useMediaPipe();
 
   useEffect(() => {
     let stopMonitor: (() => void) | null = null;
@@ -80,8 +86,26 @@ export default function RootLayout() {
   // ── Main app ─────────────────────────────────────────────────────────────────
 
   return (
+    <MediaPipeProvider value={mediaPipe}>
     <GestureHandlerRootView style={styles.root}>
       <StatusBar style="light" />
+      {/* Hidden persistent WebView — loads MediaPipe WASM once on app start */}
+      {mediaPipe.htmlUri ? (
+        <WebView
+          ref={mediaPipe.webViewRef}
+          source={{ uri: mediaPipe.htmlUri }}
+          style={styles.hiddenWebView}
+          onMessage={mediaPipe.onMessage}
+          javaScriptEnabled
+          originWhitelist={['*']}
+          allowFileAccess={true}
+          allowFileAccessFromFileURLs={true}
+          allowUniversalAccessFromFileURLs={true}
+          mixedContentMode="always"
+          cacheEnabled={true}
+          cacheMode="LOAD_CACHE_ELSE_NETWORK"
+        />
+      ) : null}
       <Stack
         screenOptions={{
           headerShown: false,
@@ -96,11 +120,13 @@ export default function RootLayout() {
         <Stack.Screen name="benchmark" />
       </Stack>
     </GestureHandlerRootView>
+    </MediaPipeProvider>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: UI.BACKGROUND_COLOR },
+  hiddenWebView: { width: 1, height: 1, opacity: 0, position: 'absolute' },
   loadingContainer: {
     flex: 1, backgroundColor: UI.BACKGROUND_COLOR,
     alignItems: 'center', justifyContent: 'center', gap: 16,

@@ -18,9 +18,8 @@ import {
   SafeAreaView, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { Camera, CameraType } from 'expo-camera';
-import WebView from 'react-native-webview';
 import { useRouter } from 'expo-router';
-import { useMediaPipe } from '@hooks/useMediaPipe';
+import { useMediaPipeContext } from '@context/MediaPipeContext';
 import { useFaceRecognition } from '@hooks/useFaceRecognition';
 import { useCameraPipeline } from '@hooks/useCameraPipeline';
 import CameraOverlay from '@components/CameraOverlay';
@@ -41,7 +40,7 @@ export default function EnrollScreen() {
   const [holdSeconds, setHoldSeconds] = useState(0);
   const holdTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const mediaPipe = useMediaPipe();
+  const mediaPipe = useMediaPipeContext();
   const faceRecognition = useFaceRecognition();
   const pipeline = useCameraPipeline({ mediaPipe, faceRecognition });
   const frameIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -163,22 +162,6 @@ export default function EnrollScreen() {
         </View>
       )}
 
-      {mediaPipe.htmlUri ? (
-        <WebView
-          ref={mediaPipe.webViewRef}
-          source={{ uri: mediaPipe.htmlUri }}
-          style={styles.hiddenWebView}
-          onMessage={mediaPipe.onMessage}
-          javaScriptEnabled
-          originWhitelist={['*']}
-          allowFileAccess={true}
-          allowFileAccessFromFileURLs={true}
-          allowUniversalAccessFromFileURLs={true}
-          mixedContentMode="always"
-          cacheEnabled={true}
-          cacheMode="LOAD_CACHE_ELSE_NETWORK"
-        />
-      ) : null}
 
       <CameraOverlay phase={pipeline.phase} landmarks={null} livenessPass={livenessPass} instruction={getInstruction()} />
 
@@ -224,7 +207,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
   noCamera: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#111' },
   noCameraText: { color: '#555', fontSize: 16 },
-  hiddenWebView: { width: 1, height: 1, opacity: 0, position: 'absolute' },
   livenessBox: { position: 'absolute', bottom: 120, left: 0, right: 0 },
   topBar: {
     position: 'absolute', top: 0, left: 0, right: 0,

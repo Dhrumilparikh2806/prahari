@@ -26,8 +26,7 @@
 <canvas id="c"></canvas>
 <img id="img">
 <script type="module">
-import { FaceLandmarker, FilesetResolver }
-  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/vision_bundle.mjs";
+import { FaceLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/vision_bundle.mjs";
 
 let faceLandmarker = null;
 let isReady = false;
@@ -45,21 +44,60 @@ const timeout = setTimeout(() => {
 
 async function init() {
   try {
-    // WASM loaded from CDN (cached on device after first download)
-    const vision = await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm"
-    );
+    post({ type: "LOG", message: "Loading WASM locally..." });
 
-    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
-        delegate: "CPU"
-      },
-      outputFaceBlendshapes: false,
-      outputFacialTransformationMatrixes: false,
-      runningMode: "IMAGE",
-      numFaces: 1
-    });
+    // Try local Metro server first (bundled WASM — no internet needed)
+    // Fall back to CDN if local not available
+    const localWasmUrls = [
+      "http://127.0.0.1:8081/assets/./assets/wasm",
+      "http://127.0.0.1:8082/assets/./assets/wasm",
+    ];
+    const cdnUrls = [
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm",
+      "https://unpkg.com/@mediapipe/tasks-vision@0.10.0/wasm",
+    ];
+
+    let vision = null;
+    for (const url of [...localWasmUrls, ...cdnUrls]) {
+      try {
+        post({ type: "LOG", message: "Trying WASM: " + url });
+        vision = await FilesetResolver.forVisionTasks(url);
+        post({ type: "LOG", message: "WASM loaded from: " + url });
+        break;
+      } catch(e) {
+        post({ type: "LOG", message: "Failed: " + url });
+      }
+    }
+    if (!vision) throw new Error("All WASM sources failed");
+
+    post({ type: "LOG", message: "WASM loaded. Loading model..." });
+
+    // Model: try local Metro dev server first (fast), fallback to CDN
+    const modelUrls = [
+      "http://127.0.0.1:8082/assets/./assets/models/face_landmarker.task",
+      "http://127.0.0.1:8081/assets/./assets/models/face_landmarker.task",
+      "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"
+    ];
+
+    let lastErr;
+    for (const modelUrl of modelUrls) {
+      try {
+        faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: { modelAssetPath: modelUrl, delegate: "CPU" },
+          outputFaceBlendshapes: false,
+          outputFacialTransformationMatrixes: false,
+          runningMode: "IMAGE",
+          numFaces: 1
+        });
+        post({ type: "LOG", message: "Model loaded from: " + modelUrl });
+        break;
+      } catch (e) {
+        lastErr = e;
+        post({ type: "LOG", message: "Model URL failed: " + modelUrl });
+      }
+    }
+
+    if (!faceLandmarker) throw lastErr;
 
     clearTimeout(timeout);
     isReady = true;

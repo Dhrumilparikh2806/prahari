@@ -16,6 +16,7 @@ module.exports = function (api) {
             // Added: config and database aliases required by new files
             '@config': './src/config',
             '@database': './src/database',
+            '@context': './src/context',
           },
         },
       ],

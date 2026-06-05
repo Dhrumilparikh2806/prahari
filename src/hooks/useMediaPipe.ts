@@ -44,7 +44,10 @@ const timeout = setTimeout(() => {
 async function init() {
   try {
     post({ type: "LOG", message: "Loading WASM..." });
+    // Try Metro dev server first (local, fast), then CDN fallback
     const wasmUrls = [
+      "http://127.0.0.1:8081/assets/./assets/wasm",
+      "http://127.0.0.1:8082/assets/./assets/wasm",
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm",
       "https://unpkg.com/@mediapipe/tasks-vision@0.10.0/wasm",
     ];
@@ -62,7 +65,10 @@ async function init() {
     if (!vision) throw new Error("All WASM sources failed");
 
     post({ type: "LOG", message: "Loading model..." });
+    // Try Metro dev server first (model file is in assets/models/), then CDN fallback
     const modelUrls = [
+      "http://127.0.0.1:8081/assets/./assets/models/face_landmarker.task",
+      "http://127.0.0.1:8082/assets/./assets/models/face_landmarker.task",
       "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.0/wasm/face_landmarker.task",
     ];

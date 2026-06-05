@@ -75,7 +75,7 @@ export default function RootLayout() {
           cacheEnabled={true}
           cacheMode="LOAD_CACHE_ELSE_NETWORK"
         />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: TERRA.BACKGROUND }, animation: 'fade' }}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: TERRA.BACKGROUND, flex: 1 }, animation: 'fade' }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="enroll" options={{ animation: 'slide_from_bottom', presentation: 'modal' }} />
         </Stack>

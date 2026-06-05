@@ -41,3 +41,4 @@ yarn-debug.log*
 yarn-error.log*
 
 assets/mediapipe_wasm/
+assets/wasm/

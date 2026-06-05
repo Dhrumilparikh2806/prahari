@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Camera, CameraType } from 'expo-camera';
-import WebView from 'react-native-webview';
 import { useFocusEffect } from 'expo-router';
 import { useMediaPipeContext } from '@context/MediaPipeContext';
 import { useFaceRecognition } from '@hooks/useFaceRecognition';
